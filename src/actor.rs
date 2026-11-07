@@ -241,7 +241,7 @@ struct Actor {
 }
 
 /// Start the actor thread. `io_factory` is overridden in tests; the server uses [`spawn`].
-pub fn spawn(cfg: Arc<Config>) -> (Handle, std::thread::JoinHandle<()>) {
+pub fn spawn(cfg: Arc<Config>) -> Result<(Handle, std::thread::JoinHandle<()>), std::io::Error> {
     spawn_with(
         cfg,
         Box::new(|cfg, simulate| -> Box<dyn NodeIo> {
@@ -256,7 +256,7 @@ pub fn spawn(cfg: Arc<Config>) -> (Handle, std::thread::JoinHandle<()>) {
 
 pub type IoFactory = Box<dyn Fn(Arc<Config>, bool) -> Box<dyn NodeIo> + Send>;
 
-pub fn spawn_with(cfg: Arc<Config>, factory: IoFactory) -> (Handle, std::thread::JoinHandle<()>) {
+pub fn spawn_with(cfg: Arc<Config>, factory: IoFactory) -> Result<(Handle, std::thread::JoinHandle<()>), std::io::Error> {
     let (tx, rx) = flume::unbounded();
     let (ptx, prx) = flume::unbounded();
     let (events, _) = broadcast::channel(2048);
@@ -279,12 +279,10 @@ pub fn spawn_with(cfg: Arc<Config>, factory: IoFactory) -> (Handle, std::thread:
         last_idle: Instant::now(),
         last_outputs: Instant::now(),
     };
-    let jh = std::thread::Builder::new().name("instrument-actor".into()).spawn(move || actor.run(factory)).unwrap_or_else(|e| {
-        // Cannot happen short of resource exhaustion; surface it loudly.
-        tracing::error!(error = %e, "could not spawn the instrument actor");
-        std::thread::spawn(|| {})
-    });
-    (handle, jh)
+    // A spawn failure (resource exhaustion) is reported to the caller instead of being
+    // hidden behind a dummy thread whose requests would all fail.
+    let jh = std::thread::Builder::new().name("instrument-actor".into()).spawn(move || actor.run(factory))?;
+    Ok((handle, jh))
 }
 
 impl Actor {
@@ -463,7 +461,12 @@ impl Actor {
             }
             Request::PllStart(p) => {
                 let est = self.need_estimate()?;
-                let st = pll::start(self.uhf()?, &est, &p, &mut ctl)?;
+                // pll::start reconfigures the recorded demodulator (time constant, rate):
+                // pause the recording for the lock search; resume re-applies the track rate.
+                self.suspend_track();
+                let r = pll::start(self.uhf()?, &est, &p, &mut ctl);
+                self.resume_track();
+                let st = r?;
                 self.pll_native = Some([st.p, st.i]);
                 self.pll_setup = Some((Degree(est.phase_deg), Hertz(est.f0_hz), Hertz(p.limit_hz)));
                 self.status.pll_active = true;
@@ -487,7 +490,18 @@ impl Actor {
                 let demod = self.cfg.roles.pll_demod;
                 let writer = TrackWriter::create(&path, &header)
                     .map_err(|e| MeasureError::Precondition(format!("cannot create the track file: {e}")))?;
-                self.uhf()?.start_stream(demod, Hertz(rate_hz)).map_err(MeasureError::from_instrument)?;
+                let started = match self.uhf.as_mut() {
+                    Some(u) => u.start_stream(demod, Hertz(rate_hz)).map_err(MeasureError::from_instrument),
+                    None => Err(MeasureError::Instrument(InstrumentError::NotConnected)),
+                };
+                if let Err(e) = started {
+                    // The recording never started: remove the header-only file instead of
+                    // leaving an orphan that no project knows about.
+                    if let Err(e2) = std::fs::remove_file(&path) {
+                        tracing::warn!(error = %e2, file = %path.display(), "could not remove the unused track file");
+                    }
+                    return Err(e);
+                }
                 let file = path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
                 self.log("info", format!("recording `{file}` at {rate_hz} Sa/s"));
                 self.track = Some(Track { writer, file, rate_hz, paused: false });
@@ -504,7 +518,12 @@ impl Actor {
                     // the resonance drifts during deposition: centre on where the PLL last was
                     p.center_hz = self.status.pll.as_ref().map(|s| s.freq_hz).filter(|f| f.is_finite() && *f > 0.0);
                 }
-                let cal = qcontrol::calibrate(self.uhf()?, &est, &p, &mut ctl)?;
+                // calibrate() reconfigures the PLL demodulator and sweeps the oscillator:
+                // pause the recording for its duration, like the sweep handler does.
+                self.suspend_track();
+                let r = qcontrol::calibrate(self.uhf()?, &est, &p, &mut ctl);
+                self.resume_track();
+                let cal = r?;
                 self.log(
                     "info",
                     format!(
@@ -755,7 +774,7 @@ mod tests {
 
     #[test]
     fn full_session_on_the_simulator() {
-        let (h, jh) = spawn(sim_cfg());
+        let (h, jh) = spawn(sim_cfg()).unwrap();
         assert!(matches!(
             h.request_blocking(Request::Sweep(sweep_req()), t()),
             Err(MeasureError::Instrument(InstrumentError::NotConnected))
@@ -778,7 +797,12 @@ mod tests {
         h.request_blocking(Request::PllStop, t()).unwrap();
         let Reply::QCal(cal) = h.request_blocking(Request::QCalibrate(qp), t()).unwrap() else { panic!("wrong reply") };
         assert!(cal.slope < 0.0);
+        // the calibration paused the recording (PLL demodulator reconfigured); it must resume
+        let Reply::Status(stq) = h.request_blocking(Request::Status, t()).unwrap() else { panic!("wrong reply") };
+        assert!(stq.tracking, "the recording must resume after the Q calibration");
         h.request_blocking(Request::PllStart(PllParams::default()), t()).unwrap();
+        let Reply::Status(stp) = h.request_blocking(Request::Status, t()).unwrap() else { panic!("wrong reply") };
+        assert!(stp.tracking, "the recording must resume after a PLL start");
         let Reply::Engaged(e) =
             h.request_blocking(Request::QEngage(EngageParams { q_target: 70_000.0, ..Default::default() }), t()).unwrap()
         else {
@@ -808,8 +832,29 @@ mod tests {
     }
 
     #[test]
+    fn failed_track_start_leaves_no_orphan_file() {
+        let (h, jh) = spawn(sim_cfg()).unwrap();
+        h.request_blocking(Request::Connect { simulate: true, device: None }, t()).unwrap();
+        let dir = std::env::temp_dir().join(format!("hqcm_orphan_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("track.csv");
+        // stream_rate_max_hz = 2e6 in the default limits: rejected by the driver after the
+        // file was created -> the header-only file must not stay behind.
+        let r = h.request_blocking(Request::TrackStart { rate_hz: 5.0e6, path: path.clone(), header: vec![] }, t());
+        assert!(matches!(r, Err(MeasureError::Instrument(InstrumentError::LimitViolation { .. }))), "{r:?}");
+        assert!(!path.exists(), "no orphaned track file may remain");
+        // a valid rate records normally
+        h.request_blocking(Request::TrackStart { rate_hz: 100.0, path: path.clone(), header: vec![] }, t()).unwrap();
+        let Reply::Track { .. } = h.request_blocking(Request::TrackStop, t()).unwrap() else { panic!("wrong reply") };
+        assert!(path.exists());
+        shutdown_and_join(&h, jh);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn connect_uses_the_address_typed_by_the_operator() {
-        let (h, jh) = spawn(sim_cfg());
+        let (h, jh) = spawn(sim_cfg()).unwrap();
         let bad = crate::config::DeviceCfg { id: "dev 1/../x".into(), ..Default::default() };
         assert!(matches!(
             h.request_blocking(Request::Connect { simulate: true, device: Some(bad) }, t()),
@@ -829,7 +874,7 @@ mod tests {
     fn cancel_aborts_a_running_sweep_and_leaves_drive_off() {
         let mut c = Config::default();
         c.sim.realtime = true; // pacing makes the sweep long enough to cancel
-        let (h, jh) = spawn(Arc::new(c));
+        let (h, jh) = spawn(Arc::new(c)).unwrap();
         h.request_blocking(Request::Connect { simulate: true, device: None }, t()).unwrap();
         let h2 = h.clone();
         let canceller = std::thread::spawn(move || {
@@ -847,7 +892,7 @@ mod tests {
 
     #[test]
     fn unsafe_requests_are_rejected_without_touching_the_instrument() {
-        let (h, jh) = spawn(sim_cfg());
+        let (h, jh) = spawn(sim_cfg()).unwrap();
         h.request_blocking(Request::Connect { simulate: true, device: None }, t()).unwrap();
         let mut p = sweep_req();
         p.drive_v = 5.0; // x2 divider => 10 V, above the 1 V limit

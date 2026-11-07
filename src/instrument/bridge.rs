@@ -38,6 +38,12 @@ fn io_err(op: &str, e: impl std::fmt::Display) -> TransportError {
     TransportError::Io { op: op.to_string(), message: e.to_string() }
 }
 
+/// Seconds (from the configuration) to `Duration`; saturates on extreme values instead
+/// of panicking like `Duration::from_secs_f64` would.
+fn dur(s: f64) -> Duration {
+    crate::units::Second(s).to_duration()
+}
+
 impl PyBridge {
     pub fn new(cfg: Arc<Config>) -> Self {
         Self { cfg, child: None, stdin: None, rx: None, next_id: 1, poisoned: false }
@@ -164,7 +170,7 @@ impl PyBridge {
     }
 
     fn short(&self) -> Duration {
-        Duration::from_secs_f64(self.cfg.bridge.call_timeout_s)
+        dur(self.cfg.bridge.call_timeout_s)
     }
 
     fn call_short(&mut self, op: &str, args: Value) -> Result<Value, TransportError> {
@@ -193,7 +199,7 @@ impl PyBridge {
             }
             if started.elapsed().as_secs_f64() > timeout_s {
                 let _ = self.call_short(&format!("{name}_stop"), Value::Null);
-                return Err(TransportError::Timeout { op: name.into(), after: Duration::from_secs_f64(timeout_s) });
+                return Err(TransportError::Timeout { op: name.into(), after: dur(timeout_s) });
             }
             let p = self.call_short(&format!("{name}_progress"), Value::Null)?;
             let frac = p.get("progress").and_then(Value::as_f64).unwrap_or(0.0);
@@ -215,7 +221,7 @@ impl NodeIo for PyBridge {
         let cfg = Arc::clone(&self.cfg);
         let d = &cfg.device;
         let args = json!({"device": d.id, "host": d.host, "port": d.port});
-        let t = Duration::from_secs_f64(self.cfg.bridge.connect_timeout_s);
+        let t = dur(self.cfg.bridge.connect_timeout_s);
         let v = self.call("connect", args, t)?;
         Ok(DeviceInfo {
             device: v.get("device").and_then(Value::as_str).unwrap_or(&d.id).to_string(),
@@ -334,12 +340,12 @@ impl NodeIo for PyBridge {
     }
 
     fn load_settings(&mut self, path: &str) -> Result<(), TransportError> {
-        let t = Duration::from_secs_f64(self.cfg.bridge.connect_timeout_s);
+        let t = dur(self.cfg.bridge.connect_timeout_s);
         self.call("load_settings", json!({"path": path}), t).map(|_| ())
     }
 
     fn save_settings(&mut self, path: &str) -> Result<(), TransportError> {
-        let t = Duration::from_secs_f64(self.cfg.bridge.connect_timeout_s);
+        let t = dur(self.cfg.bridge.connect_timeout_s);
         self.call("save_settings", json!({"path": path}), t).map(|_| ())
     }
 

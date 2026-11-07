@@ -84,6 +84,7 @@ sweep_averaging_tc = 5.0
 sweep_timeout_s = 900.0
 pll_lock_timeout_s = 20.0
 pll_lock_tol_deg = 5.0            # |phase error| below this counts as locked
+pll_lock_poll_s = 0.1             # poll step while waiting for the PLL to lock
 pid_settle_s = 0.75               # wait after changing the Q-control gain
 q_demod_tc_s = 0.0005             # filter in front of the Q PIDs: sets the Q-control bandwidth
 q_demod_order = 4                 # NB: the PLL closed-loop bandwidth must exceed it (blog)

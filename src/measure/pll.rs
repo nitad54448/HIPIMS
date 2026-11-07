@@ -190,7 +190,7 @@ pub fn start(uhf: &mut Uhf, est: &ResonanceEstimate, p: &PllParams, ctl: &mut dy
     uhf.enable_loop(Loop::Pll, true).map_err(MeasureError::from_instrument)?;
     // Wait for 5 consecutive good readings.
     let deadline = cfg.timing.pll_lock_timeout_s;
-    let step = 0.1;
+    let step = cfg.timing.pll_lock_poll_s;
     let mut waited = 0.0;
     let mut good = 0;
     let mut last;

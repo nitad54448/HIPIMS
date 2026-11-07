@@ -28,7 +28,7 @@ fn rig(name: &str) -> Rig {
     c.sim.realtime = false;
     c.data_dir = dir.clone();
     let cfg = Arc::new(c);
-    let (handle, jh) = actor::spawn(cfg.clone());
+    let (handle, jh) = actor::spawn(cfg.clone()).expect("cannot spawn the instrument actor");
     let project = Project::new(&cfg.data_dir, "itest", cfg.to_toml()).unwrap();
     let state = AppState::new(cfg, handle, project, TOKEN.into(), true, Box::new(|_| Ok(())));
     hipims_qcm::server::spawn_background(&state);

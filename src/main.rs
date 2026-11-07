@@ -138,7 +138,13 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let (handle, actor_thread) = actor::spawn(cfg.clone());
+    let (handle, actor_thread) = match actor::spawn(cfg.clone()) {
+        Ok(spawned) => spawned,
+        Err(e) => {
+            eprintln!("error: cannot start the instrument actor: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
 
     // A panic anywhere must still drive the instrument to its safe state.
     let panic_handle = handle.clone();

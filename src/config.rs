@@ -136,6 +136,8 @@ pub struct Timing {
     pub sweep_timeout_s: f64,
     pub pll_lock_timeout_s: f64,
     pub pll_lock_tol_deg: f64,
+    /// Poll step of the PLL lock-wait loop (s).
+    pub pll_lock_poll_s: f64,
     pub pid_settle_s: f64,
     /// Time constant / order of the demodulator filtering X and Y for the Q-feedback.
     /// The PLL bandwidth must exceed the resulting Q-control bandwidth.
@@ -263,6 +265,7 @@ impl Default for Timing {
             sweep_timeout_s: 900.0,
             pll_lock_timeout_s: 20.0,
             pll_lock_tol_deg: 5.0,
+            pll_lock_poll_s: 0.1,
             pid_settle_s: 0.75,
             q_demod_tc_s: 0.5e-3,
             q_demod_order: 4,
@@ -357,8 +360,8 @@ impl Config {
             return bad("each role needs its own demodulator");
         }
         let t = &self.timing;
-        if !(t.q_demod_tc_s > 0.0) || !(1..=8).contains(&t.q_demod_order) {
-            return bad("timing.q_demod_tc_s must be > 0 and q_demod_order in 1..=8");
+        if !(t.q_demod_tc_s >= l.tc_min_s && t.q_demod_tc_s <= l.tc_max_s) || !(1..=8).contains(&t.q_demod_order) {
+            return bad("timing.q_demod_tc_s must be within limits.tc_min_s..tc_max_s and q_demod_order in 1..=8");
         }
         if r.q_demod_x == r.q_demod_y {
             return bad("roles.q_demod_x and q_demod_y must differ");
@@ -366,6 +369,30 @@ impl Config {
         let m = &self.routing;
         if m.q_mixer_x == m.q_mixer_y || [m.q_mixer_x, m.q_mixer_y].contains(&m.drive_mixer) {
             return bad("routing: drive_mixer, q_mixer_x and q_mixer_y must be three different channels");
+        }
+        // Every value that becomes a wait or a timeout must stay finite and sane: they are
+        // converted to `Duration`s, and a stray huge number must be rejected at load time,
+        // not panic the actor thread later.
+        const DAY_S: f64 = 86_400.0;
+        for (name, v) in [
+            ("timing.sweep_timeout_s", t.sweep_timeout_s),
+            ("timing.pll_lock_timeout_s", t.pll_lock_timeout_s),
+            ("timing.pll_lock_poll_s", t.pll_lock_poll_s),
+            ("timing.pid_settle_s", t.pid_settle_s),
+            ("timing.stream_poll_s", t.stream_poll_s),
+            ("timing.gated_timeout_s", t.gated_timeout_s),
+            ("bridge.call_timeout_s", self.bridge.call_timeout_s),
+            ("bridge.connect_timeout_s", self.bridge.connect_timeout_s),
+        ] {
+            if !(v.is_finite() && v > 0.0 && v <= DAY_S) {
+                return bad(&format!("{name} must be in (0, {DAY_S}] s"));
+            }
+        }
+        if !(t.pll_lock_tol_deg.is_finite() && t.pll_lock_tol_deg > 0.0 && t.pll_lock_tol_deg <= 180.0) {
+            return bad("timing.pll_lock_tol_deg must be in (0, 180]");
+        }
+        if !(t.sweep_bandwidth_hz >= 0.01 && t.sweep_bandwidth_hz <= 1.0e6) {
+            return bad("timing.sweep_bandwidth_hz must be in [0.01, 1e6] Hz (the driver sweep limit)");
         }
         self.device.normalized()?;
         Ok(())

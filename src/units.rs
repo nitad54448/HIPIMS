@@ -64,9 +64,14 @@ impl Second {
     pub fn to_micros(self) -> f64 {
         self.0 * 1e6
     }
+    /// Duration for waits/polls. Negative or non-finite => zero; huge but finite values
+    /// saturate at `Duration::MAX` (`from_secs_f64` would panic on overflow).
     pub fn to_duration(self) -> std::time::Duration {
         if self.0.is_finite() && self.0 > 0.0 {
-            std::time::Duration::from_secs_f64(self.0)
+            match std::time::Duration::try_from_secs_f64(self.0) {
+                Ok(d) => d,
+                Err(_) => std::time::Duration::MAX,
+            }
         } else {
             std::time::Duration::ZERO
         }
@@ -122,5 +127,12 @@ mod tests {
     #[test]
     fn negative_duration_is_zero() {
         assert_eq!(Second(-1.0).to_duration(), std::time::Duration::ZERO);
+    }
+
+    #[test]
+    fn huge_or_nan_duration_saturates_instead_of_panicking() {
+        assert_eq!(Second(1e300).to_duration(), std::time::Duration::MAX);
+        assert_eq!(Second(f64::NAN).to_duration(), std::time::Duration::ZERO);
+        assert_eq!(Second(0.5).to_duration(), std::time::Duration::from_millis(500));
     }
 }

@@ -509,12 +509,19 @@ function initAna() {
     $('outRate').textContent = r.rate_nm_s != null ? r.rate_nm_s.toPrecision(5) : '—';
     kv($('outInfo'), [['Thickness', fmt(r.thickness_nm, 3) + ' nm'], ['Δf', fmt(r.df_hz, 3) + ' Hz'], ['Window', fmt(r.ta_s, 2) + ' → ' + fmt(r.tb_s, 2) + ' s'], ['Model', r.model + ' · loading ' + fmt(r.loading * 100, 3) + ' %'], ['Mass', fmtSI(r.mass_g, ' g')]]);
     $('outWarn').replaceChildren(...(r.warning ? [el('div', { class: 'warnbox' }, r.warning)] : []));
+    $('iffNeut').textContent = 'Neutral rate: ' + (r.rate_nm_s != null ? r.rate_nm_s.toPrecision(5) : '—') + ' nm/s (the last calculated window)';
   }));
   $('iffUse').addEventListener('click', () => { if (S.lastWin && S.lastWin.rate_nm_s != null) $('iffRef').value = S.lastWin.rate_nm_s; });
   $('iffCalc').addEventListener('click', (ev) => act(ev.target, async () => {
     if (!S.lastWin || S.lastWin.rate_nm_s == null) throw new Error('calculate a window first (its rate is the neutral rate)');
-    const r = (await api('/api/analysis/iff', { reference_nm_s: num('iffRef'), neutral_nm_s: S.lastWin.rate_nm_s })).result;
-    $('iffOut').textContent = fmt(r.percent, 1) + ' %'; $('iffNote').textContent = r.note || '';
+    const ref = num('iffRef');
+    if (!Number.isFinite(ref)) throw new Error('reference rate is missing');
+    const neutral = S.lastWin.rate_nm_s;
+    const same = Math.abs(ref - neutral) <= 1e-9 * Math.max(1.0, Math.abs(ref));
+    const r = (await api('/api/analysis/iff', { reference_nm_s: ref, neutral_nm_s: neutral })).result;
+    $('iffOut').textContent = fmt(r.percent, 1) + ' %';
+    const hint = same ? 'Reference and neutral rate are the same window (IFF = 0 %): load the reference track, press "Use current rate as reference", then load the neutral-only track and calculate its window.' : '';
+    $('iffNote').textContent = [r.note, hint].filter(Boolean).join(' ');
   }));
 }
 

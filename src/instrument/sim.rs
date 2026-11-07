@@ -399,7 +399,7 @@ impl NodeIo for SimUhf {
         let sig = self.cfg.sim.noise_rel * a * GAIN / (req.pulses.max(1) as f64).sqrt();
         // Demod filter state starts at the steady state of the signal at the window start.
         let shift0 = self.pulse_shift_hz(start_us);
-        let (mut fx, mut fy) = self.response(f_res + 0.0, f_res + shift0, a, gh);
+        let (mut fx, mut fy) = self.response(f_res, f_res + shift0, a, gh);
         let mut out = GatedResult { pulses: req.pulses, ..Default::default() };
         for k in 0..n {
             if ctl.cancelled() {
