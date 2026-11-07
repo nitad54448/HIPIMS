@@ -33,6 +33,8 @@ On the lab PC (LabOne installed, same PC as the instrument):
    (see *Not verified on hardware* below).
 3. Run `start.bat`, open the printed URL (it carries the session token; the browser opens by itself).
    The **Exit** button in the top bar stops the service safely; Ctrl-C does the same.
+   If the window was closed improperly, `stop.bat` ends a leftover service (a forced stop - see
+   the note in the file about the outputs) and frees the port for the next start.
 
 The executable is self-contained: web UI and the Python bridge are embedded. Unknown or stale keys in
 `config.toml` are rejected at start-up.
