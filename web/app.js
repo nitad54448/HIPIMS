@@ -87,7 +87,7 @@ function tickLabel(v, step) {
 class Plot {
   constructor(id, opts) {
     this.c = $(id); this.box = this.c.parentElement; this.ro = this.box.querySelector('.readout');
-    this.o = Object.assign({ cursors: false, onCursors: null, xlabel: '' }, opts || {});
+    this.o = Object.assign({ cursors: false, onCursors: null, xl: '', yl: '' }, opts || {});
     this.series = []; this.view = null; this.cur = null; this.drag = null;
     const c = this.c;
     c.addEventListener('mousemove', (e) => this.move(e));
@@ -114,7 +114,8 @@ class Plot {
     if (!(y1 > y0)) { y0 = Number.isFinite(y0) ? y0 - 1 : 0; y1 = y0 + 2; }
     const pad = (y1 - y0) * 0.06; return { x0, x1, y0: y0 - pad, y1: y1 + pad };
   }
-  geom() { const w = this.c.clientWidth, h = this.c.clientHeight; return { w, h, l: 62, r: 10, t: 20, b: 24 }; }
+  /* Margins grow when axis labels (o.xl / o.yl: quantity + unit) are present. */
+  geom() { const w = this.c.clientWidth, h = this.c.clientHeight; return { w, h, l: this.o.yl ? 88 : 62, r: 10, t: 20, b: this.o.xl ? 38 : 24 }; }
   draw() {
     const c = this.c, dpr = window.devicePixelRatio || 1, g = this.geom();
     if (!g.w || !g.h) return;
@@ -134,6 +135,9 @@ class Plot {
     for (let v = Math.ceil(B.y0 / ys) * ys; v <= B.y1; v += ys) { const y = Math.round(sy(v)) + 0.5; ctx.beginPath(); ctx.moveTo(g.l, y); ctx.lineTo(g.w - g.r, y); ctx.stroke(); ctx.fillText(tickLabel(v, ys), g.l - 5, y); }
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     for (let v = Math.ceil(B.x0 / xs) * xs; v <= B.x1; v += xs) { const x = Math.round(sx(v)) + 0.5; ctx.beginPath(); ctx.moveTo(x, g.t); ctx.lineTo(x, g.h - g.b); ctx.stroke(); ctx.fillText(tickLabel(v, xs), x, g.h - g.b + 4); }
+    /* Axis labels: what the tick numbers mean (quantity + unit). */
+    if (this.o.xl) { ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillText(this.o.xl, (g.l + g.w - g.r) / 2, g.h - 13); }
+    if (this.o.yl) { ctx.save(); ctx.translate(13, g.t + (g.h - g.t - g.b) / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillText(this.o.yl, 0, 0); ctx.restore(); }
     ctx.save(); ctx.beginPath(); ctx.rect(g.l, g.t, g.w - g.l - g.r, g.h - g.t - g.b); ctx.clip();
     for (const s of this.series) {
       const col = cssv(s.color || '--s1');
@@ -172,9 +176,12 @@ class Plot {
 const P = {};
 function initPlots() {
   P.R = new Plot('plR'); P.Th = new Plot('plTh'); P.Ny = new Plot('plNy', { equal: true });
-  P.liveF = new Plot('plLiveF'); P.livePh = new Plot('plLivePh');
-  P.qG = new Plot('plQGamma'); P.qD = new Plot('plQRes');
-  P.hTr = new Plot('plHTr'); P.hProf = new Plot('plHProf');
+  P.liveF = new Plot('plLiveF', { xl: 't (s)', yl: 'f (Hz)' });
+  P.livePh = new Plot('plLivePh', { xl: 't (s)', yl: 'θ (deg)' });
+  P.qG = new Plot('plQGamma', { xl: 'gain', yl: 'Γ (1/s)' });
+  P.qD = new Plot('plQRes', { xl: 'f (Hz)', yl: 'R (V)' });
+  P.hTr = new Plot('plHTr', { xl: 't (µs)', yl: 'Δθ (deg)' });
+  P.hProf = new Plot('plHProf', { xl: 'overlap (µs)', yl: 'Δf (Hz)' });
   P.an = new Plot('plAn', { cursors: true, onCursors: (a, b) => { $('wA').value = a.toFixed(3); $('wB').value = b.toFixed(3); } });
 }
 const redrawAll = () => Object.values(P).forEach((p) => p.draw());

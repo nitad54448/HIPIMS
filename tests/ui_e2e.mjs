@@ -18,7 +18,7 @@ if (!browserPath) { console.log('no Chrome/Edge found: UI test skipped'); proces
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const work = mkdtempSync(join(tmpdir(), 'hq-e2e-'));
 const PORT = 18765, DBG = 19333;
-writeFileSync(join(work, 'cfg.toml'), `data_dir = ${JSON.stringify(join(work, 'data'))}\n[server]\nport = ${PORT}\nopen_browser = false\n[sim]\nrealtime = false\n`);
+writeFileSync(join(work, 'cfg.toml'), `data_dir = ${JSON.stringify(join(work, 'data'))}\n[server]\nport = ${PORT}\nopen_browser = false\n[sim]\nrealtime = false\ndrift_hz_per_s = -0.02\n`);
 
 const exe = resolve(process.cwd(), 'target/debug/hipims-qcm' + (process.platform === 'win32' ? '.exe' : ''));
 const svc = spawn(exe, ['--config', join(work, 'cfg.toml'), '--sim', '--no-browser'], { stdio: ['ignore', 'pipe', 'pipe'] });

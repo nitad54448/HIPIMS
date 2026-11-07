@@ -1,6 +1,6 @@
 [package]
 name = "hipims-qcm"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 description = "QCM resonance tracking, Q-control and HiPIMS-gated acquisition on a Zurich Instruments UHF"
 license = "MIT"

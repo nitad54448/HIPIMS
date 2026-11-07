@@ -163,8 +163,10 @@
    </div>
   </div>
   <div>
-   <div class="plotbox"><canvas id="plLiveF"></canvas><span class="ptitle">Frequency (Hz) — live</span><span class="readout"></span></div>
-   <div class="plotbox"><canvas id="plLivePh"></canvas><span class="ptitle">Phase (deg) / amplitude — live</span><span class="readout"></span></div>
+   <div class="plots-fit">
+    <div class="plotbox"><canvas id="plLiveF"></canvas><span class="ptitle">Frequency — live</span><span class="readout"></span></div>
+    <div class="plotbox"><canvas id="plLivePh"></canvas><span class="ptitle">Phase — live</span><span class="readout"></span></div>
+   </div>
   </div>
  </div>
 </section>
@@ -195,8 +197,10 @@
    </div>
   </div>
   <div>
-   <div class="plotbox"><canvas id="plQGamma"></canvas><span class="ptitle">Damping rate Γ = π·BW vs feedback gain</span><span class="readout"></span></div>
-   <div class="plotbox"><canvas id="plQRes"></canvas><span class="ptitle">Effective resonance R(f) — one curve per gain</span><span class="readout"></span></div>
+   <div class="plots-fit">
+    <div class="plotbox"><canvas id="plQGamma"></canvas><span class="ptitle">Damping rate Γ = π·BW vs feedback gain</span><span class="readout"></span></div>
+    <div class="plotbox"><canvas id="plQRes"></canvas><span class="ptitle">Effective resonance R(f) — one curve per gain</span><span class="readout"></span></div>
+   </div>
    <div id="qTable"></div>
   </div>
  </div>
@@ -232,8 +236,10 @@
    </div>
   </div>
   <div>
-   <div class="plotbox"><canvas id="plHTr"></canvas><span class="ptitle">Pulse-averaged phase in the window (deg) — one curve per step</span><span class="readout"></span></div>
-   <div class="plotbox"><canvas id="plHProf"></canvas><span class="ptitle">Cumulative resonance shift Δf vs overlap with the pulse</span><span class="readout"></span></div>
+   <div class="plots-fit">
+    <div class="plotbox"><canvas id="plHTr"></canvas><span class="ptitle">Pulse-averaged phase in the window (deg) — one curve per step</span><span class="readout"></span></div>
+    <div class="plotbox"><canvas id="plHProf"></canvas><span class="ptitle">Cumulative resonance shift Δf vs overlap with the pulse</span><span class="readout"></span></div>
+   </div>
    <div id="hTable"></div>
   </div>
  </div>
