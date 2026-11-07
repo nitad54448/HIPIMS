@@ -4,6 +4,8 @@ rem  HIPIMS / QCM workstation launcher.
 rem    start.bat            real UHF through LabOne (needs Python + zhinst + numpy)
 rem    start.bat --sim      built-in simulator, no instrument or LabOne needed
 rem    start.bat --port 9000 --no-browser     any hipims-qcm option is passed on
+rem  In a source checkout (Cargo.toml present, Rust installed) the program is rebuilt
+rem  on every start - a no-op when nothing changed - so you never run a stale version.
 rem  Close the program with the Exit button in the browser (or Ctrl+C in this window):
 rem  the outputs are switched off first.
 rem ---------------------------------------------------------------------------
@@ -11,21 +13,26 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 title HIPIMS QCM workstation
 
-rem --- 1. find or build the executable ---------------------------------------
+rem --- 1. build (source checkout) or locate the executable -------------------
 set "EXE="
-if exist "hipims-qcm.exe" set "EXE=hipims-qcm.exe"
-if not defined EXE if exist "target\release\hipims-qcm.exe" set "EXE=target\release\hipims-qcm.exe"
-if not defined EXE (
+if exist "Cargo.toml" (
     where cargo >nul 2>nul
-    if errorlevel 1 (
-        echo hipims-qcm.exe was not found and Rust ^(cargo^) is not installed.
-        echo Copy hipims-qcm.exe next to this file, or install Rust from https://rustup.rs
-        goto :fail
+    if not errorlevel 1 (
+        echo Checking the build ^(the first time takes about a minute^)...
+        cargo build --release
+        if errorlevel 1 goto :fail
+        set "EXE=target\release\hipims-qcm.exe"
     )
-    echo Building hipims-qcm ^(first start only, about a minute^)...
-    cargo build --release
-    if errorlevel 1 goto :fail
+)
+if not defined EXE if exist "hipims-qcm.exe" set "EXE=hipims-qcm.exe"
+if not defined EXE if exist "target\release\hipims-qcm.exe" (
     set "EXE=target\release\hipims-qcm.exe"
+    echo Warning: Rust is not installed, using the existing build - it may be out of date.
+)
+if not defined EXE (
+    echo hipims-qcm.exe was not found and Rust ^(cargo^) is not installed.
+    echo Copy hipims-qcm.exe next to this file, or install Rust from https://rustup.rs
+    goto :fail
 )
 
 rem --- 2. configuration -------------------------------------------------------

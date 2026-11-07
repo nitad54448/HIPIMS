@@ -15,6 +15,7 @@
 
 <header id="strip" role="status" aria-live="polite">
   <div class="cell"><span id="connLed" class="led" aria-hidden="true"></span><b id="connTxt">Service…</b></div>
+  <div class="cell"><span id="verTxt" class="badge" title="Program version: if this is not the version you expect, you are running an old build"></span></div>
   <div class="cell"><span id="busyTxt" class="badge">idle</span><span id="progress" hidden><i></i></span><button id="cancelBtn" hidden>Cancel</button></div>
   <div class="cell"><span id="pllLed" class="led" aria-hidden="true"></span><span id="pllTxt">PLL off</span></div>
   <div class="cell"><span id="saveTxt" class="badge">—</span></div>
@@ -126,10 +127,10 @@
    </div>
   </div>
   <div>
-   <div class="plots2">
-    <div class="plotbox"><canvas id="plR"></canvas><span class="ptitle">Amplitude R (V)</span><span class="readout"></span></div>
-    <div class="plotbox"><canvas id="plTh"></canvas><span class="ptitle">Phase θ (deg, unwrapped) — shown for the Lorentz fit</span><span class="readout"></span></div>
-    <div class="plotbox"><canvas id="plNy"></canvas><span class="ptitle">Nyquist (x, y) — shown for the Circle fit</span><span class="readout"></span></div>
+   <div class="plots2 squares">
+    <div class="plotbox square"><canvas id="plR"></canvas><span class="ptitle">Amplitude R (V)</span><span class="readout"></span></div>
+    <div class="plotbox square"><canvas id="plTh"></canvas><span class="ptitle">Phase θ (deg, unwrapped) — shown for the Lorentz fit</span><span class="readout"></span></div>
+    <div class="plotbox square"><canvas id="plNy"></canvas><span class="ptitle">Nyquist (x, y) — shown for the Circle fit</span><span class="readout"></span></div>
    </div>
    <p class="note">Amplitude is always shown; the second plot is the phase (Lorentz) or the Nyquist circle (Circle), following the fit selected under Resonance. Mouse wheel zooms, drag pans, double-click resets.</p>
   </div>

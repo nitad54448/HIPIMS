@@ -104,6 +104,10 @@ try {
   ok(await ev(`!document.getElementById('plTh').parentElement.hidden && document.getElementById('plNy').parentElement.hidden`), 'Lorentz selected: amplitude + phase plots');
   await ev(`document.querySelector('input[name=fit][value=Circle]').click()`);
   ok(await ev(`document.getElementById('plTh').parentElement.hidden && !document.getElementById('plNy').parentElement.hidden`), 'Circle selected: amplitude + Nyquist plots');
+  await sleep(400);
+  ok(await ev(`(() => { const c = document.getElementById('plNy'); return Math.abs(c.clientWidth - c.clientHeight) <= 2 && c.clientWidth > 250; })()`), 'Nyquist plot is square');
+  ok(await ev(`(() => { const p = P.Ny, g = p.g; const sx = (g.w - g.l - g.r) / (p.B.x1 - p.B.x0), sy = (g.h - g.t - g.b) / (p.B.y1 - p.B.y0); return Math.abs(sx / sy - 1) < 0.01; })()`), 'Nyquist axes have equal scale (a circle looks like a circle)');
+  ok(await ev(`(() => { const c = document.getElementById('plR'); return Math.abs(c.clientWidth - c.clientHeight) <= 2; })()`), 'amplitude plot is square');
   await click('fitApply');
   await waitFor(`S.status.estimate && S.status.estimate.method === 'Circle'`, 'circle fit selected');
   await waitFor(`document.getElementById('estopBtn').classList.contains('live')`, 'STOP turns red once the drive output is on');

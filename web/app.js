@@ -121,6 +121,10 @@ class Plot {
     if (c.width !== Math.round(g.w * dpr) || c.height !== Math.round(g.h * dpr)) { c.width = Math.round(g.w * dpr); c.height = Math.round(g.h * dpr); }
     const ctx = c.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, g.w, g.h);
     const B = this.bounds(); this.B = B; this.g = g;
+    if (this.o.equal) { /* same data units per pixel on both axes: a circle stays a circle */
+      const pw = g.w - g.l - g.r, ph = g.h - g.t - g.b, s = Math.max((B.x1 - B.x0) / pw, (B.y1 - B.y0) / ph), cx = (B.x0 + B.x1) / 2, cy = (B.y0 + B.y1) / 2;
+      B.x0 = cx - s * pw / 2; B.x1 = cx + s * pw / 2; B.y0 = cy - s * ph / 2; B.y1 = cy + s * ph / 2;
+    }
     const sx = (x) => g.l + (x - B.x0) / (B.x1 - B.x0) * (g.w - g.l - g.r);
     const sy = (y) => g.h - g.b - (y - B.y0) / (B.y1 - B.y0) * (g.h - g.t - g.b);
     this.sx = sx; this.sy = sy;
@@ -167,7 +171,7 @@ class Plot {
 }
 const P = {};
 function initPlots() {
-  P.R = new Plot('plR'); P.Th = new Plot('plTh'); P.Ny = new Plot('plNy');
+  P.R = new Plot('plR'); P.Th = new Plot('plTh'); P.Ny = new Plot('plNy', { equal: true });
   P.liveF = new Plot('plLiveF'); P.livePh = new Plot('plLivePh');
   P.qG = new Plot('plQGamma'); P.qD = new Plot('plQRes');
   P.hTr = new Plot('plHTr'); P.hProf = new Plot('plHProf');
@@ -593,7 +597,7 @@ async function boot() {
     S.config = await api('/api/config'); initDeviceFields(); const l = S.config.limits;
     kv($('limitInfo'), [['Frequency', fmtSI(l.freq_min_hz) + ' – ' + fmtSI(l.freq_max_hz) + ' Hz'], ['Drive max', l.drive_max_v + ' V'], ['Q-feedback max', l.q_amp_max_v + ' V'], ['|Q-control gain| max', String(l.q_gain_abs_max)], ['PLL excursion max', l.pll_limit_hz_max + ' Hz'], ['Sweep points max', String(l.sweep_points_max)]]);
     S.materials = await api('/api/materials'); $('cMat').replaceChildren(...S.materials.map((m) => el('option', { value: m.name }, m.name)), el('option', { value: 'custom' }, 'custom')); $('cMat').value = 'Ti';
-    const s = await api('/api/status'); applyStatus(s.status); applyProject(s.project);
+    const s = await api('/api/status'); $('verTxt').textContent = 'v' + s.version; applyStatus(s.status); applyProject(s.project);
     loadProjectData(await api('/api/project')); await refreshProjects();
   } catch (e) { notify('error', e.message); }
   connectWS(); refreshControls();

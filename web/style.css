@@ -102,6 +102,11 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
 .plotbox .ptitle { position: absolute; left: 10px; top: 4px; font-size: 11px; color: var(--mut); pointer-events: none; }
 .plotbox .readout { position: absolute; right: 8px; top: 4px; font: 11px var(--mono); color: var(--mut); pointer-events: none; }
 .plots2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 8px; }
+/* square plots (Sweep tab): a Nyquist circle must look like a circle */
+.plots2.squares { grid-template-columns: repeat(2, minmax(0, 560px)); }
+@media (max-width: 1250px) { .plots2.squares { grid-template-columns: minmax(0, 560px); } }
+.plotbox.square { aspect-ratio: 1 / 1; }
+.plotbox.square canvas { height: 100%; }
 .big { font: 600 20px var(--mono); font-variant-numeric: tabular-nums; }
 .note { color: var(--mut); font-size: 12px; }
 .warnbox { background: var(--warn-bg); border: 1px solid var(--warn); color: var(--warn); padding: 6px 8px; border-radius: 3px; margin: 6px 0; }
