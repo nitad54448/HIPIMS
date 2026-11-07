@@ -1,0 +1,37 @@
+[package]
+name = "hipims-qcm"
+version = "0.2.0"
+edition = "2021"
+description = "QCM resonance tracking, Q-control and HiPIMS-gated acquisition on a Zurich Instruments UHF"
+license = "MIT"
+rust-version = "1.80"
+
+[lib]
+name = "hipims_qcm"
+path = "src/lib.rs"
+
+[[bin]]
+name = "hipims-qcm"
+path = "src/main.rs"
+
+[dependencies]
+axum = { version = "0.8", features = ["ws"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "sync", "time", "net"] }
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = "1"
+toml = "0.8"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+flume = "0.11"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+getrandom = "0.2"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+
+[profile.release]
+lto = "thin"
+panic = "unwind"

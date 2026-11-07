@@ -1,0 +1,106 @@
+# hipims-qcm configuration. Every key is optional (defaults shown). start.bat copies this file to
+# `config.toml` on the first start; edit that copy on the lab PC. Unknown keys are rejected.
+# Nothing physical is hard-coded in the code.
+
+data_dir = "data"                 # projects, tracks, reports
+
+[server]
+port = 8765                       # web UI, bound to 127.0.0.1 only
+open_browser = true
+
+[device]
+id = "dev2091"                    # UHF serial as shown in LabOne
+host = "localhost"                # LabOne Data Server (same PC as LabOne => localhost)
+port = 8004
+
+[bridge]
+python = "python"                 # interpreter with `pip install zhinst numpy` (try "py" on Windows)
+script = "bridge/uhf_bridge.py"   # optional override; the script is also embedded in the executable
+call_timeout_s = 10.0             # strict timeout of every short call
+connect_timeout_s = 30.0
+
+# ---------------------------------------------------------------------------------------
+# Demodulators (0-based node indices). Q-control follows the Zurich Instruments blog:
+#   demod 1 (0) = measured response, PLL phase detector and X/Y source of the Q loops
+#   demod 2 (1) = drive channel and the fast HiPIMS measurement
+#   demod 3 (2) = Q feedback, X component (phase 0 deg)
+#   demod 4 (3) = Q feedback, Y component (phase 90 deg)
+#   demod 5 (4) = optional AGC
+[roles]
+pll_demod = 0
+meas_demod = 1
+q_demod_x = 2
+q_demod_y = 3
+agc_demod = 4
+osc_main = 0
+osc_q = 1
+
+# One signal output carries drive + Q feedback (no second output, no divider).
+# Output-amplitude channels: drive = sigouts/0/amplitudes/1, Q-X = .../2, Q-Y = .../3 (blog layout).
+[routing]
+sigout_drive = 0
+drive_mixer = 1
+drive_range_v = 1.0
+q_mixer_x = 2
+q_mixer_y = 3
+sigin = 0
+sigin_range_v = 1.0
+gate_trigger_signal = "TrigIn1"   # DAQ hardware-trigger signal for the HiPIMS measurement window
+
+# PID wiring (UHF-PID enumerations). VERIFY on the target PC in the LabOne node tree
+# (/devN/pids/0/input, .../output) before the first lock.
+#   PID 1 (0) = PLL, PID 2 (1) = optional AGC, PID 3 (2) = Q on X, PID 4 (3) = Q on Y
+[pid]
+pll_index = 0
+q_x_index = 2
+q_y_index = 3
+agc_index = 1
+input_x = 0
+input_y = 1
+input_r = 2
+input_theta = 3                   # phase detector for the PLL
+output_sigout_amplitude = 0       # for this output the PID output channel is the amplitude channel
+output_osc_freq = 2               # oscillator frequency (PLL output)
+# pll_mode_value = 1              # uncomment if your firmware has /pids/n/mode and needs PLL mode
+
+# Hard limits, validated before EVERY write (the UI cannot bypass them).
+[limits]
+freq_min_hz = 1000000.0
+freq_max_hz = 10000000.0
+drive_max_v = 1.0                 # drive amplitude
+q_amp_max_v = 0.25                # PID output limit of the Q loops: fail-safe against lasing / saturation
+q_gain_abs_max = 50.0             # largest |feedback gain| (P = -gain on both Q PIDs)
+pid_gain_abs_max = 1000000.0
+pll_limit_hz_max = 20000.0
+sweep_points_max = 20000
+stream_rate_max_hz = 2000000.0
+tc_min_s = 1e-7
+tc_max_s = 1.0
+
+[timing]
+sweep_bandwidth_hz = 50.0         # demod bandwidth during the sweep (crystal BW ~ 120 Hz at 50 kQ)
+sweep_settle_inaccuracy = 0.001
+sweep_averaging_tc = 5.0
+sweep_timeout_s = 900.0
+pll_lock_timeout_s = 20.0
+pll_lock_tol_deg = 5.0            # |phase error| below this counts as locked
+pid_settle_s = 0.75               # wait after changing the Q-control gain
+q_demod_tc_s = 0.0005             # filter in front of the Q PIDs: sets the Q-control bandwidth
+q_demod_order = 4                 # NB: the PLL closed-loop bandwidth must exceed it (blog)
+stream_poll_s = 0.05
+gated_timeout_s = 120.0
+journal_flush_s = 1.0
+
+# Parameters of the built-in simulator (used by "Connect simulator" and by the tests).
+[sim]
+f0_hz = 5998500.0
+q = 50000.0
+inverted_slope = false
+gain_slope = -15.0                # dGamma/dgain in 1/s (negative: gain > 0 raises Q)
+noise_rel = 0.0002
+realtime = true                   # false = virtual time (fast, used by tests)
+parasitic_decay = true
+drift_hz_per_s = -0.8
+pulse_width_us = 100.0
+pulse_shift_hz = -25.0
+pulse_rise_us = 30.0

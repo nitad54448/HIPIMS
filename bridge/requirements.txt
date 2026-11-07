@@ -1,0 +1,2 @@
+zhinst>=24.1
+numpy

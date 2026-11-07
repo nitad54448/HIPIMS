@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QCM HiPIMS Workstation</title>
+<script>
+/* Apply the saved theme before first paint (no flash). */
+(function () { try { var t = localStorage.getItem('hq-theme'); if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t); } catch (e) {} })();
+</script>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header id="strip" role="status" aria-live="polite">
+  <div class="cell"><span id="connLed" class="led" aria-hidden="true"></span><b id="connTxt">Service…</b></div>
+  <div class="cell"><span id="busyTxt" class="badge">idle</span><span id="progress" hidden><i></i></span><button id="cancelBtn" hidden>Cancel</button></div>
+  <div class="cell"><span id="pllLed" class="led" aria-hidden="true"></span><span id="pllTxt">PLL off</span></div>
+  <div class="cell"><span id="saveTxt" class="badge">—</span></div>
+  <div class="cell grow"><span id="msg"></span></div>
+  <div class="cell">
+    <button id="armBtn" title="Hardware-driving actions need the outputs to be armed. Auto-disarms after 60 s.">Arm outputs</button>
+    <button id="estopBtn" title="Nothing is running">STOP</button>
+    <button id="themeBtn" title="Dark / light theme" aria-label="Toggle theme">◐</button>
+    <button id="helpBtn" title="Keyboard shortcuts" aria-label="Help">?</button>
+    <button id="exitBtn" title="Switch outputs off, save the project and stop the service">Exit</button>
+  </div>
+</header>
+
+<nav role="tablist" aria-label="Workflow">
+  <button role="tab" id="tab-exp" aria-controls="p-exp" aria-selected="true">1 Experiment</button>
+  <button role="tab" id="tab-sweep" aria-controls="p-sweep" aria-selected="false">2 Sweep</button>
+  <button role="tab" id="tab-pll" aria-controls="p-pll" aria-selected="false">3 PLL lock</button>
+  <button role="tab" id="tab-q" aria-controls="p-q" aria-selected="false">4 Q control</button>
+  <button role="tab" id="tab-hip" aria-controls="p-hip" aria-selected="false">5 HiPIMS</button>
+  <button role="tab" id="tab-ana" aria-controls="p-ana" aria-selected="false">6 Analysis</button>
+  <button role="tab" id="tab-log" aria-controls="p-log" aria-selected="false">7 Log</button>
+</nav>
+
+<main>
+
+<!-- ================================================= 1 EXPERIMENT -->
+<section role="tabpanel" id="p-exp" aria-labelledby="tab-exp">
+ <div class="grid2">
+  <div>
+   <div class="card">
+    <h2>Instrument</h2>
+    <div class="field"><label for="devId" data-tip="Serial of the instrument as shown in LabOne (e.g. dev2091). Becomes part of every node path.">Device ID</label><input type="text" id="devId" spellcheck="false" autocomplete="off" placeholder="dev2091"></div>
+    <div class="field"><label for="devHost" data-tip="Computer running the LabOne Data Server: localhost when LabOne is on this PC, otherwise its IP address or name.">Data Server host</label><input type="text" id="devHost" spellcheck="false" autocomplete="off" placeholder="localhost"></div>
+    <div class="field"><label for="devPort" data-tip="LabOne Data Server port (8004 for the UHF).">Port</label><input type="number" id="devPort" step="1" min="1" max="65535" placeholder="8004"></div>
+    <div class="hint" id="devHint"></div>
+    <dl class="kv" id="devInfo"></dl>
+    <div class="row">
+      <button id="connectBtn" class="primary">Connect UHF</button>
+      <button id="connectSimBtn">Connect simulator</button>
+      <button id="disconnectBtn">Disconnect</button>
+    </div>
+    <p class="note">Connect talks to the LabOne Data Server configured in <span class="mono">config.toml</span>. The simulator needs no hardware.</p>
+    <div class="field wide"><label for="cfgPath" data-tip="Path on the PC running the service. Files saved from the LabOne UI (.xml) can be used. Load the right configuration, or adapt the parameters in LabOne, before sweeping.">Instrument settings file (.xml)</label>
+      <input type="text" id="cfgPath" placeholder="C:\path\to\settings.xml"></div>
+    <div class="row"><button id="cfgLoad">Load settings</button><button id="cfgSave">Save settings</button></div>
+   </div>
+   <div class="card">
+    <h2>Safety limits (enforced by the service)</h2>
+    <dl class="kv" id="limitInfo"></dl>
+   </div>
+  </div>
+  <div>
+   <div class="card">
+    <h2>Project</h2>
+    <div class="row"><b id="projName" class="mono">—</b><span id="projDir" class="note"></span></div>
+    <div class="field"><label for="sampleId" data-tip="Written into every data file header and the report.">Sample ID</label><input type="text" id="sampleId"></div>
+    <div class="field"><label for="operator">Operator</label><input type="text" id="operator"></div>
+    <div class="field wide"><label for="notes">Notes</label><textarea id="notes" rows="3"></textarea></div>
+    <div class="row">
+      <button id="metaSave">Apply</button><button id="projSave" class="primary">Save project</button>
+      <input type="text" id="newName" placeholder="new project name" style="width:200px">
+      <button id="projNew">New</button>
+    </div>
+    <div class="row"><label for="projList">Open</label><select id="projList" style="width:260px"></select><button id="projLoad">Load</button><button id="projRefresh">Refresh</button></div>
+    <div class="row"><button id="reportBtn">Open report</button><span class="note">Opens a printable page: use Print → Save as PDF.</span></div>
+   </div>
+   <details class="card"><summary>Workflow</summary>
+    <ol class="note">
+      <li><b>Sweep</b> around the resonance (≈6 MHz) and choose the Lorentz or circle fit.</li>
+      <li><b>PLL lock</b>: advisor gains (sign from the slope polarity), lock, record frequency.</li>
+      <li><b>Q control</b> (optional): gain calibration by sweeps of the effective resonance, target Q (PLL off while calibrating).</li>
+      <li><b>HiPIMS</b>: step the measurement window against the plasma pulse.</li>
+      <li><b>Analysis</b>: Sauerbrey / Z-match thickness and rate, ion-flux fraction, report.</li>
+    </ol>
+   </details>
+  </div>
+ </div>
+</section>
+
+<!-- ================================================= 2 SWEEP -->
+<section role="tabpanel" id="p-sweep" aria-labelledby="tab-sweep" hidden>
+ <div class="grid2">
+  <div>
+   <div class="card">
+    <h2>Sweep</h2>
+    <div class="field"><label for="swStart" data-tip="Lower end of the frequency scan.">Start (Hz)</label><input type="number" id="swStart" value="5997000" step="any"></div>
+    <div class="field"><label for="swStop" data-tip="Upper end of the frequency scan.">Stop (Hz)</label><input type="number" id="swStop" value="5999800" step="any"></div>
+    <div class="field"><label for="swPoints" data-tip="More points resolve a narrow resonance better but make the scan longer (a 50 kQ crystal at 6 MHz is ≈120 Hz wide).">Points</label><input type="number" id="swPoints" value="300" step="1" min="3"></div>
+    <div class="field"><label for="swDrive" data-tip="Voltage at the crystal (amplitude of the drive channel).">Drive (V)</label><input type="number" id="swDrive" value="0.05" step="any" min="0"></div>
+    <div class="field"><label for="swBw" data-tip="Demodulator bandwidth during the scan. Lower values average away noise but slow the scan; keep it well below the resonance width.">Bandwidth (Hz)</label><input type="number" id="swBw" value="50" step="any" min="0.01"></div>
+    <label class="check"><input type="checkbox" id="swDiv"><span data-tip="Only for an external two-output set-up with a 50 Ω divider. With the Q-control of this program (one output, feedback summed inside the instrument) leave it off.">Double output (external divider only)</span></label>
+    <div class="hint" id="swHint"></div>
+    <div class="row"><button id="swRun" class="primary" data-hw>Run sweep</button><span class="reason" data-reason></span></div>
+    <div class="row"><button id="swUseView">Use plot view as range</button></div>
+   </div>
+   <div class="card">
+    <h2>Resonance</h2>
+    <div class="row"><label class="check"><input type="radio" name="fit" value="Lorentz" checked> Lorentz</label>
+      <label class="check"><input type="radio" name="fit" value="Circle"> Circle</label><button id="fitApply">Use selected fit</button></div>
+    <dl class="kv" id="resInfo"><dt>f₀</dt><dd>—</dd></dl>
+    <div id="fitErrors"></div>
+    <details><summary class="note">Manual override</summary>
+      <div class="field"><label for="ovF0">f₀ (Hz)</label><input type="number" id="ovF0" step="any"></div>
+      <div class="field"><label for="ovBw" data-tip="Full width at half power.">Bandwidth (Hz)</label><input type="number" id="ovBw" step="any"></div>
+      <div class="field"><label for="ovPh" data-tip="Measured demodulator phase at resonance: the PLL setpoint.">Phase (deg)</label><input type="number" id="ovPh" step="any"></div>
+      <div class="field"><label for="ovPol" data-tip="Normal: phase falls through resonance. Inverted (parasitic capacitance): phase rises; the PLL gain signs are reversed.">Slope</label><select id="ovPol"><option>Normal</option><option>Inverted</option></select></div>
+      <div class="row"><button id="ovApply">Apply override</button></div>
+    </details>
+   </div>
+  </div>
+  <div>
+   <div class="plots2">
+    <div class="plotbox"><canvas id="plR"></canvas><span class="ptitle">Amplitude R (V)</span><span class="readout"></span></div>
+    <div class="plotbox"><canvas id="plTh"></canvas><span class="ptitle">Phase θ (deg, unwrapped) — shown for the Lorentz fit</span><span class="readout"></span></div>
+    <div class="plotbox"><canvas id="plNy"></canvas><span class="ptitle">Nyquist (x, y) — shown for the Circle fit</span><span class="readout"></span></div>
+   </div>
+   <p class="note">Amplitude is always shown; the second plot is the phase (Lorentz) or the Nyquist circle (Circle), following the fit selected under Resonance. Mouse wheel zooms, drag pans, double-click resets.</p>
+  </div>
+ </div>
+</section>
+
+<!-- ================================================= 3 PLL -->
+<section role="tabpanel" id="p-pll" aria-labelledby="tab-pll" hidden>
+ <div class="grid2">
+  <div>
+   <div class="card">
+    <h2>PLL (PID 1)</h2>
+    <div class="field"><label for="pllBw" data-tip="Closed-loop tracking bandwidth. A compromise between accuracy (noise) and stability (not losing lock during fast mass changes).">Target BW (Hz)</label><input type="number" id="pllBw" value="100" step="any" min="0.1"></div>
+    <div class="field"><label for="pllFac" data-tip="Multiplier applied to the target bandwidth. 0.8 to 1 works well.">BW factor</label><input type="number" id="pllFac" value="0.9" step="any" min="0.1"></div>
+    <div class="field"><label for="pllTc" data-tip="Time constant of the PLL demodulator. 0.3–1 ms ignores plasma spikes; too slow loses lock on large shifts.">Demod TC (ms)</label><input type="number" id="pllTc" value="0.5" step="any" min="0.0001"></div>
+    <div class="field"><label for="pllLim" data-tip="Largest oscillator excursion around f₀. Reaching it counts as loss of lock.">Limit ± (Hz)</label><input type="number" id="pllLim" value="2000" step="any" min="1"></div>
+    <label class="check"><input type="checkbox" id="pllDev" checked><span data-tip="Use the LabOne PID Advisor (resonator model). Unchecked: local first-order model.">Use device PID Advisor</span></label>
+    <label class="check"><input type="checkbox" id="pllMan"><span data-tip="Enter P, I, D yourself. Signs are applied as typed.">Manual gains</span></label>
+    <div class="field"><label>P / I / D</label><span style="display:flex;gap:4px"><input type="number" id="gP" step="any" disabled><input type="number" id="gI" step="any" disabled><input type="number" id="gD" step="any" value="0" disabled></span></div>
+    <div class="row"><button id="pllAdv">Advisor</button><button id="pllStart" class="primary" data-hw>Lock PLL</button><button id="pllStop">PLL off</button></div>
+    <span class="reason" data-reason></span>
+    <dl class="kv" id="pllInfo"></dl>
+    <div id="pllAdvice" class="note"></div>
+   </div>
+   <div class="card">
+    <h2>Recording (Track f)</h2>
+    <div class="field"><label for="trRate" data-tip="Samples per second streamed from the PLL demodulator. High rates make large files.">Rate (Sa/s)</label><input type="number" id="trRate" value="100" step="any" min="1"></div>
+    <div class="row"><button id="trStart" class="primary">Record</button><button id="trStop">Stop</button></div>
+    <dl class="kv" id="trInfo"></dl>
+   </div>
+  </div>
+  <div>
+   <div class="plotbox"><canvas id="plLiveF"></canvas><span class="ptitle">Frequency (Hz) — live</span><span class="readout"></span></div>
+   <div class="plotbox"><canvas id="plLivePh"></canvas><span class="ptitle">Phase (deg) / amplitude — live</span><span class="readout"></span></div>
+  </div>
+ </div>
+</section>
+
+<!-- ================================================= 4 Q CONTROL -->
+<section role="tabpanel" id="p-q" aria-labelledby="tab-q" hidden>
+ <div class="grid2">
+  <div>
+   <div class="card">
+    <h2>Gain calibration</h2>
+    <p class="note">Method of the Zurich Instruments blog: the X and Y of the response are fed back at 0° and 90° (two PIDs, one output) with <b>P = −gain</b>. Gain &gt; 0 raises Q, gain &lt; 0 lowers it. The effective resonance is swept at each gain; Γ = π·BW is fitted against the gain. The <b>PLL must be off</b> during the calibration.</p>
+    <div class="field wide"><label for="qGains" data-tip="Feedback gains to scan (comma separated); include 0 for the native resonance. They run in order of increasing |gain|. Gains beyond 90% of the lasing threshold (estimated from the points so far) are skipped; the PID output limits are the hard fail-safe.">Gains</label><input type="text" id="qGains" value="-4, -2, 0, 2, 4, 8"></div>
+    <div class="field"><label for="qSpan" data-tip="Sweep span as a multiple of the native bandwidth. The resonance narrows with enhancement, so keep enough points per width.">Span (× BW)</label><input type="number" id="qSpan" value="8" step="any" min="3" max="100"></div>
+    <div class="field"><label for="qPts">Points / sweep</label><input type="number" id="qPts" value="400" step="1" min="50"></div>
+    <div class="field"><label for="qMargin" data-tip="Fraction of the lasing threshold that must not be exceeded.">Lasing margin</label><input type="number" id="qMargin" value="0.9" step="0.05" min="0.1" max="0.99"></div>
+    <div class="hint" id="qHint"></div>
+    <div class="row"><button id="qCal" class="primary" data-hw>Calibrate</button></div><span class="reason" data-reason></span>
+    <dl class="kv" id="qInfo"></dl>
+   </div>
+   <div class="card">
+    <h2>Engage</h2>
+    <div class="field"><label for="qTarget" data-tip="Quality factor to reach. The gain follows from the calibration; the PLL gains are rescaled by Q_native / Q_target.">Target Q</label><input type="number" id="qTarget" value="50000" step="any" min="1"></div>
+    <label class="check"><input type="checkbox" id="qAgc"><span data-tip="Optional amplitude regulation (PID 2) on a slow demodulator; not part of the blog method.">Enable AGC</span></label>
+    <div class="field"><label>AGC P / I</label><span style="display:flex;gap:4px"><input type="number" id="agcP" value="0.1" step="any"><input type="number" id="agcI" value="1" step="any"></span></div>
+    <div class="row"><button id="qEngage" class="primary" data-hw>Engage</button><button id="qOff">Disengage</button></div><span class="reason" data-reason></span>
+    <div id="qEngaged" class="note"></div>
+    <div id="qWarn"></div>
+   </div>
+  </div>
+  <div>
+   <div class="plotbox"><canvas id="plQGamma"></canvas><span class="ptitle">Damping rate Γ = π·BW vs feedback gain</span><span class="readout"></span></div>
+   <div class="plotbox"><canvas id="plQRes"></canvas><span class="ptitle">Effective resonance R(f) — one curve per gain</span><span class="readout"></span></div>
+   <div id="qTable"></div>
+  </div>
+ </div>
+</section>
+
+<!-- ================================================= 5 HIPIMS -->
+<section role="tabpanel" id="p-hip" aria-labelledby="tab-hip" hidden>
+ <div class="grid2">
+  <div>
+   <div class="card">
+    <h2>Gated step</h2>
+    <p class="note">The pulse generator gives the plasma trigger and the measurement window at the same frequency. Set the window position on the generator, enter it here, then acquire. Start with a window <b>before</b> the pulse (baseline), then move it into the pulse step by step.</p>
+    <div class="field"><label for="hStart" data-tip="Window start relative to the plasma-pulse start, as set on the pulse generator. Negative = before the pulse.">Window start (µs)</label><input type="number" id="hStart" value="-400" step="any"></div>
+    <div class="field"><label for="hWin" data-tip="Window duration (the same for all steps).">Window length (µs)</label><input type="number" id="hWin" value="300" step="any" min="0.1"></div>
+    <div class="field"><label for="hPulses" data-tip="Pulses averaged per step. No limit; more pulses reduce noise.">Pulses</label><input type="number" id="hPulses" value="500" step="1" min="1"></div>
+    <div class="field"><label for="hPoints">Points / window</label><input type="number" id="hPoints" value="300" step="1" min="8"></div>
+    <div class="field"><label for="hTc" data-tip="Time constant of the fast demodulator: must be much shorter than the plasma rise time (order 1).">Demod TC (µs)</label><input type="number" id="hTc" value="2" step="any" min="0.1"></div>
+    <div class="field"><label for="hRate" data-tip="Output rate of the fast demodulator.">Demod rate (kSa/s)</label><input type="number" id="hRate" value="1000" step="any" min="1"></div>
+    <div class="hint" id="hHint"></div>
+    <div class="row"><button id="hStep" class="primary" data-hw>Acquire step</button><button id="hNew">New series</button></div><span class="reason" data-reason></span>
+   </div>
+   <div class="card">
+    <h2>Profile</h2>
+    <div class="field"><label for="hPulse" data-tip="Duration of the plasma pulse (HiPIMS on-time).">Pulse width (µs)</label><input type="number" id="hPulse" value="100" step="any" min="0.1"></div>
+    <div class="field"><label for="hF0">f₀ (Hz)</label><input type="number" id="hF0" step="any"></div>
+    <div class="field"><label for="hQ" data-tip="Effective Q during the measurement (the Q-controlled value if Q control is on).">Q</label><input type="number" id="hQ" step="any"></div>
+    <div class="field"><label for="hPol">Slope</label><select id="hPol"><option>Normal</option><option>Inverted</option></select></div>
+    <div class="field"><label for="hEnd" data-tip="Fraction of the window (at its end) averaged for the phase value.">End fraction</label><input type="number" id="hEnd" value="0.05" step="0.01" min="0.01" max="0.5"></div>
+    <div class="field"><label for="hFq" data-tip="Unloaded crystal frequency for the thickness estimate.">f_q (Hz)</label><input type="number" id="hFq" value="6000000" step="any"></div>
+    <div class="field"><label for="hRho" data-tip="Film density, g/cm³.">ρ film (g/cm³)</label><input type="number" id="hRho" value="4.506" step="any"></div>
+    <div class="row"><button id="hProfile" class="primary">Compute profile</button></div>
+    <div id="hWarn"></div>
+   </div>
+  </div>
+  <div>
+   <div class="plotbox"><canvas id="plHTr"></canvas><span class="ptitle">Pulse-averaged phase in the window (deg) — one curve per step</span><span class="readout"></span></div>
+   <div class="plotbox"><canvas id="plHProf"></canvas><span class="ptitle">Cumulative resonance shift Δf vs overlap with the pulse</span><span class="readout"></span></div>
+   <div id="hTable"></div>
+  </div>
+ </div>
+</section>
+
+<!-- ================================================= 6 ANALYSIS -->
+<section role="tabpanel" id="p-ana" aria-labelledby="tab-ana" hidden>
+ <div class="grid2">
+  <div>
+   <div class="card">
+    <h2>Recorded data</h2>
+    <div class="field wide"><label for="anTrack">Track</label><select id="anTrack"></select></div>
+    <div class="row"><button id="anLoad">Load</button><span id="anInfo" class="note"></span></div>
+   </div>
+   <div class="card">
+    <h2>Crystal and film</h2>
+    <div class="field"><label for="cFq" data-tip="Unloaded frequency of the crystal (start of the deposition).">f_q (Hz)</label><input type="number" id="cFq" value="6000000" step="any"></div>
+    <div class="field"><label for="cDia" data-tip="Electrode / film diameter, for the mass.">Diameter (mm)</label><input type="number" id="cDia" value="10" step="any"></div>
+    <div class="field"><label for="cMat">Material</label><select id="cMat"></select></div>
+    <div class="field"><label for="cRho">ρ (g/cm³)</label><input type="number" id="cRho" value="4.506" step="any"></div>
+    <div class="field"><label for="cZ" data-tip="Acoustic impedance ratio Z = √(ρq μq / ρf μf).">Z-ratio</label><input type="number" id="cZ" value="0.628" step="any"></div>
+    <div class="field"><label for="cModel" data-tip="Auto uses the Z-match equation everywhere (it reduces to Sauerbrey for small loading).">Model</label>
+      <select id="cModel"><option value="auto">Auto (Z-match)</option><option value="sauerbrey">Sauerbrey</option><option value="zmatch">Z-match</option></select></div>
+   </div>
+   <div class="card">
+    <h2>Cursor window</h2>
+    <div class="field"><label for="wA">Start (s)</label><input type="number" id="wA" step="any"></div>
+    <div class="field"><label for="wB">End (s)</label><input type="number" id="wB" step="any"></div>
+    <div class="row"><button id="anCalc" class="primary">Calculate</button></div>
+    <div class="big" id="outRate">—</div><div class="note">nm / s</div>
+    <dl class="kv" id="outInfo"></dl>
+    <div id="outWarn"></div>
+   </div>
+   <div class="card">
+    <h2>Ion-flux fraction</h2>
+    <div class="field"><label for="iffRef" data-tip="Deposition rate with ions + neutrals (reference configuration).">Reference v_tot (nm/s)</label><input type="number" id="iffRef" step="any"></div>
+    <div class="row"><button id="iffUse">Use current rate as reference</button></div>
+    <div class="row"><button id="iffCalc">Calculate IFF</button><b id="iffOut" class="mono">—</b></div><div id="iffNote" class="note"></div>
+   </div>
+  </div>
+  <div>
+   <div class="plotbox"><canvas id="plAn" style="height:340px"></canvas><span class="ptitle">Frequency (Hz) — drag to place the cursors</span><span class="readout"></span></div>
+   <h3>Analysis revisions (append-only)</h3><div id="revTable"></div>
+  </div>
+ </div>
+</section>
+
+<!-- ================================================= 7 LOG -->
+<section role="tabpanel" id="p-log" aria-labelledby="tab-log" hidden>
+ <div class="card">
+  <h2>Session log</h2>
+  <div class="row"><button id="logCopy">Copy</button><button id="logExport">Export</button>
+   <label for="lvl">Tracing level (instrument traffic at debug)</label>
+   <select id="lvl"><option>info</option><option>debug</option><option>warn</option><option>error</option><option>trace</option></select></div>
+  <div id="log" role="log" aria-live="off"></div>
+ </div>
+ <div class="card"><h2>Project history</h2><div id="history"></div></div>
+</section>
+
+</main>
+
+<dialog id="dlg" aria-labelledby="dlgTitle"><h3 id="dlgTitle"></h3><p id="dlgBody"></p><div class="row"><button id="dlgOk" class="primary"></button><button id="dlgCancel">Cancel</button></div></dialog>
+<dialog id="helpDlg"><h3>Keyboard</h3>
+ <p class="note">Alt+1 … Alt+7: switch tab · Alt+A: arm/disarm outputs · Esc: cancel the running job · Ctrl+Shift+S: emergency stop · Ctrl+S: save project.<br>Plots: wheel = zoom, drag = pan, double-click = reset.</p>
+ <div class="row"><button onclick="document.getElementById('helpDlg').close()">Close</button></div></dialog>
+
+<script src="/app.js"></script>
+</body>
+</html>

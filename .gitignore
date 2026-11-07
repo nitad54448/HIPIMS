@@ -1,0 +1,6 @@
+/target
+/data
+*.log
+config.toml
+__pycache__/
+*.pyc
