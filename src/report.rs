@@ -114,13 +114,12 @@ pub fn render(p: &Project) -> String {
             o.push_str(&row(
                 "Instrument",
                 format!(
-                    "{} {} serial {} fw {} options {}{}",
+                    "{} {} serial {} fw {} options {}",
                     d.device,
                     d.devtype,
                     d.serial,
                     d.firmware,
-                    d.options.join("/"),
-                    if d.simulated { " (SIMULATED DATA)" } else { "" }
+                    d.options.join("/")
                 ),
             ));
         }

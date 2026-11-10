@@ -2,7 +2,6 @@
 rem ---------------------------------------------------------------------------
 rem  HIPIMS / QCM workstation launcher.
 rem    start.bat            real UHF through LabOne (needs Python + zhinst + numpy)
-rem    start.bat --sim      built-in simulator, no instrument or LabOne needed
 rem    start.bat --port 9000 --no-browser     any hipims-qcm option is passed on
 rem  In a source checkout (Cargo.toml present, Rust installed) the program is rebuilt
 rem  on every start - a no-op when nothing changed - so you never run a stale version.
@@ -41,17 +40,13 @@ if not exist "config.toml" if exist "config\default.toml" (
     echo Created config.toml from config\default.toml - edit device.id and check the [pid] section.
 )
 
-rem --- 3. Python bridge prerequisites (not needed for the simulator) ----------
-echo %* | find /i "--sim" >nul
-if not errorlevel 1 goto :run
-
+rem --- 3. Python bridge prerequisites ----------
 set "PY=python"
 %PY% --version >nul 2>nul
 if errorlevel 1 set "PY=py -3"
 %PY% --version >nul 2>nul
 if errorlevel 1 (
     echo Python was not found. Install Python 3 ^(python.org^), then run this file again.
-    echo Or start the simulator with:  start.bat --sim
     goto :fail
 )
 %PY% -c "import zhinst.utils, numpy" >nul 2>nul

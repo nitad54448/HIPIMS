@@ -75,7 +75,7 @@ impl Uhf {
     pub fn connect(mut io: Box<dyn NodeIo>, cfg: Arc<Config>) -> Result<Self> {
         let dev = cfg.device.id.clone();
         let info = io.connect().map_err(|e| map_op(&dev, "connect", e))?;
-        tracing::info!(device = %info.device, devtype = %info.devtype, simulated = info.simulated, "connected");
+        tracing::info!(device = %info.device, devtype = %info.devtype, "connected");
         Ok(Self { io, dev, cfg, info, streaming: false, closed: false })
     }
 
@@ -134,7 +134,7 @@ impl Uhf {
         self.io.get(&node).map(NodeValue::as_i64).map_err(|e| map_t(&self.dev, &node, e))
     }
 
-    /// Wait (virtual time in the simulator, real time on hardware).
+    /// Wait (real time).
     pub fn wait(&mut self, d: Second) {
         self.io.wait(d.to_duration());
     }

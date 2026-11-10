@@ -91,17 +91,3 @@ q_demod_order = 4                 # NB: the PLL closed-loop bandwidth must excee
 stream_poll_s = 0.05
 gated_timeout_s = 120.0
 journal_flush_s = 1.0
-
-# Parameters of the built-in simulator (used by "Connect simulator" and by the tests).
-[sim]
-f0_hz = 5998500.0
-q = 50000.0
-inverted_slope = false
-gain_slope = -15.0                # dGamma/dgain in 1/s (negative: gain > 0 raises Q)
-noise_rel = 0.0002
-realtime = true                   # false = virtual time (fast, used by tests)
-parasitic_decay = true
-drift_hz_per_s = -0.8
-pulse_width_us = 100.0
-pulse_shift_hz = -25.0
-pulse_rise_us = 30.0

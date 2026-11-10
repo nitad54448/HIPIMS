@@ -248,7 +248,7 @@ function refreshControls() {
   });
   const devWhy = deviceProblem(); $('devHint').textContent = connected ? '' : devWhy;
   ['devId', 'devHost', 'devPort'].forEach((id) => { $(id).disabled = connected || !!busy; });
-  $('connectBtn').disabled = connected || !!busy || !!devWhy; $('connectSimBtn').disabled = connected || !!busy || !!devWhy; $('disconnectBtn').disabled = !connected || !!busy;
+  $('connectBtn').disabled = connected || !!busy || !!devWhy; $('disconnectBtn').disabled = !connected || !!busy;
   $('pllStop').disabled = !st.pll_active; $('pllAdv').disabled = !connected || !st.estimate || !!busy;
   $('trStart').disabled = !connected || !!st.tracking; $('trStop').disabled = !st.tracking;
   $('qOff').disabled = !st.q_engaged; $('fitApply').disabled = !S.sweep || !!busy;
@@ -290,8 +290,8 @@ const parseGains = () => $('qGains').value.split(/[,;\s]+/).filter(Boolean).map(
 function kv(dl, rows) { dl.replaceChildren(); for (const [k, v] of rows) { dl.append(el('dt', {}, k), el('dd', {}, v)); } }
 function applyStatus(st) {
   S.status = st;
-  $('connLed').className = 'led ' + (st.connected ? (st.simulated ? 'warn' : 'ok') : '');
-  $('connTxt').textContent = st.connected ? (st.simulated ? 'SIMULATOR ' : '') + (st.device ? st.device.devtype + ' ' + st.device.device : 'connected') : 'Not connected';
+  $('connLed').className = 'led ' + (st.connected ? 'ok' : '');
+  $('connTxt').textContent = st.connected ? (st.device ? st.device.devtype + ' ' + st.device.device : 'connected') : 'Not connected';
   const b = $('busyTxt'); b.textContent = st.busy ? st.busy : 'idle'; b.className = 'badge' + (st.busy ? ' warn' : '');
   const live = !!(st.connected && (st.outputs_on || st.pll_active || st.q_engaged || st.tracking || st.busy));
   $('estopBtn').classList.toggle('live', live);
@@ -300,7 +300,7 @@ function applyStatus(st) {
   $('pllLed').className = 'led ' + (st.pll_active ? (lock ? 'ok' : 'err') : '');
   $('pllTxt').textContent = !st.pll_active ? 'PLL off' : lock ? 'PLL locked' : 'PLL NOT locked';
   if (st.device && st.connected) { $('devId').value = st.device.device; }
-  kv($('devInfo'), st.device && st.connected ? [['Device', st.device.device], ['Type', st.device.devtype], ['Serial', st.device.serial], ['Options', (st.device.options || []).join(', ')], ['Firmware', st.device.firmware], ['Mode', st.device.simulated ? 'SIMULATED' : 'hardware']] : []);
+  kv($('devInfo'), st.device && st.connected ? [['Device', st.device.device], ['Type', st.device.devtype], ['Serial', st.device.serial], ['Options', (st.device.options || []).join(', ')], ['Firmware', st.device.firmware]] : []);
   if (pll) kv($('pllInfo'), [['State', pll.state], ['Frequency', fmt(pll.freq_hz, 3) + ' Hz'], ['Phase error', fmt(pll.phase_error_deg, 2) + '°'], ['At limit', pll.at_limit ? 'YES' : 'no'], ['P / I / D', [pll.p, pll.i, pll.d].map((v) => fmtSI(v)).join(' / ')], ['Bandwidth', fmt(pll.bandwidth_hz, 1) + ' Hz (' + (pll.advisor_from_device ? 'LabOne advisor' : 'local model') + ')'], ['Slope', pll.polarity]]);
   else kv($('pllInfo'), []);
   kv($('trInfo'), st.tracking ? [['File', st.track_file], ['Samples', String(st.track_samples)]] : [['Recording', 'off']]);
@@ -550,13 +550,13 @@ function initDeviceFields() {
   ['devId', 'devHost', 'devPort'].forEach((id) => $(id).addEventListener('input', refreshControls));
 }
 function initExp() {
-  const conn = (sim) => (ev) => act(ev.target, async () => {
-    notify('info', sim ? 'starting simulator…' : 'connecting to ' + $('devId').value.trim() + ' (LabOne Data Server)…');
-    const dev = deviceBody(); await api('/api/connect', { simulate: sim, device: dev });
+  const conn = (ev) => act(ev.target, async () => {
+    notify('info', 'connecting to ' + $('devId').value.trim() + ' (LabOne Data Server)…');
+    const dev = deviceBody(); await api('/api/connect', { device: dev });
     try { localStorage.setItem('hq-device', JSON.stringify(dev)); } catch (e) { /* ignore */ }
     notify('ok', 'connected');
   });
-  $('connectBtn').addEventListener('click', conn(false)); $('connectSimBtn').addEventListener('click', conn(true));
+  $('connectBtn').addEventListener('click', conn);
   $('disconnectBtn').addEventListener('click', (ev) => act(ev.target, async () => { await api('/api/disconnect', {}); S.sweep = null; notify('info', 'disconnected, outputs off'); }));
   $('cfgLoad').addEventListener('click', (ev) => act(ev.target, async () => { await api('/api/settings/load', { path: $('cfgPath').value }); notify('ok', 'settings loaded'); }));
   $('cfgSave').addEventListener('click', (ev) => act(ev.target, async () => { await api('/api/settings/save', { path: $('cfgPath').value }); notify('ok', 'settings saved'); }));

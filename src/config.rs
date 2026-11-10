@@ -18,7 +18,6 @@ pub struct Config {
     pub pid: PidWiring,
     pub limits: Limits,
     pub timing: Timing,
-    pub sim: SimCfg,
     pub data_dir: PathBuf,
 }
 
@@ -148,25 +147,6 @@ pub struct Timing {
     pub journal_flush_s: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct SimCfg {
-    pub f0_hz: f64,
-    pub q: f64,
-    pub inverted_slope: bool,
-    /// Gamma(gain) = Gamma_native + gain_slope * gain  (negative => gain > 0 raises Q).
-    pub gain_slope: f64,
-    pub noise_rel: f64,
-    pub realtime: bool,
-    pub parasitic_decay: bool,
-    /// Slow resonance drift (deposition), Hz per second.
-    pub drift_hz_per_s: f64,
-    /// Simulated plasma pulse: width (us), total resonance shift (Hz), rise time (us).
-    pub pulse_width_us: f64,
-    pub pulse_shift_hz: f64,
-    pub pulse_rise_us: f64,
-}
-
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -178,7 +158,6 @@ impl Default for Config {
             pid: PidWiring::default(),
             limits: Limits::default(),
             timing: Timing::default(),
-            sim: SimCfg::default(),
             data_dir: PathBuf::from("data"),
         }
     }
@@ -275,24 +254,6 @@ impl Default for Timing {
         }
     }
 }
-impl Default for SimCfg {
-    fn default() -> Self {
-        Self {
-            f0_hz: 5.998_5e6,
-            q: 50_000.0,
-            inverted_slope: false,
-            gain_slope: -15.0,
-            noise_rel: 2e-4,
-            realtime: true,
-            parasitic_decay: true,
-            drift_hz_per_s: -0.8,
-            pulse_width_us: 100.0,
-            pulse_shift_hz: -25.0,
-            pulse_rise_us: 30.0,
-        }
-    }
-}
-
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
     #[error("cannot read config `{path}`: {message}")]

@@ -17,7 +17,6 @@ USAGE: hipims-qcm [OPTIONS]
   --config <file>     TOML configuration (default: ./config.toml, ./config/default.toml, or next to the executable)
   --data-dir <dir>    where projects are stored (default: from the config, `data`)
   --port <n>          web UI port (default 8765, bound to 127.0.0.1 only)
-  --sim               preselect the built-in simulator (no LabOne/hardware needed)
   --no-browser        do not open the browser automatically
   --print-config      print the effective configuration and exit
   -h, --help          show this help
@@ -29,13 +28,12 @@ struct Args {
     config: Option<PathBuf>,
     data_dir: Option<PathBuf>,
     port: Option<u16>,
-    sim: bool,
     no_browser: bool,
     print_config: bool,
 }
 
 fn parse_args() -> Result<Option<Args>, String> {
-    let mut a = Args { config: None, data_dir: None, port: None, sim: false, no_browser: false, print_config: false };
+    let mut a = Args { config: None, data_dir: None, port: None, no_browser: false, print_config: false };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
         match arg.as_str() {
@@ -46,7 +44,6 @@ fn parse_args() -> Result<Option<Args>, String> {
             "--config" => a.config = Some(it.next().ok_or("--config needs a path")?.into()),
             "--data-dir" => a.data_dir = Some(it.next().ok_or("--data-dir needs a path")?.into()),
             "--port" => a.port = Some(it.next().ok_or("--port needs a number")?.parse().map_err(|_| "invalid port")?),
-            "--sim" => a.sim = true,
             "--no-browser" => a.no_browser = true,
             "--print-config" => a.print_config = true,
             other => return Err(format!("unknown option `{other}` (see --help)")),
@@ -156,7 +153,7 @@ fn main() -> ExitCode {
     }));
 
     let token = server::new_token();
-    let state = AppState::new(cfg.clone(), handle.clone(), project, token.clone(), args.sim, setter);
+    let state = AppState::new(cfg.clone(), handle.clone(), project, token.clone(), setter);
     let code = rt.block_on(async {
         let addr = std::net::SocketAddr::from(([127, 0, 0, 1], cfg.server.port));
         let listener = match tokio::net::TcpListener::bind(addr).await {
@@ -166,7 +163,7 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         };
-        let url = format!("http://127.0.0.1:{}/#token={}{}", cfg.server.port, token, if args.sim { "&sim=1" } else { "" });
+        let url = format!("http://127.0.0.1:{}/#token={}", cfg.server.port, token);
         println!(
             "hipims-qcm {} ready:\n\n    {url}\n\nUse the Exit button in the UI (or Ctrl-C) to stop; outputs are switched off first.",
             env!("CARGO_PKG_VERSION")

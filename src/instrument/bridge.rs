@@ -233,7 +233,6 @@ impl NodeIo for PyBridge {
                 .map(|a| a.iter().filter_map(|o| o.as_str().map(str::to_string)).collect())
                 .unwrap_or_default(),
             firmware: v.get("firmware").map(|f| f.to_string().trim_matches('"').to_string()).unwrap_or_default(),
-            simulated: false,
         })
     }
 

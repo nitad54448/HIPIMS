@@ -48,7 +48,6 @@ pub struct Inner {
     busy: Mutex<Option<String>>,
     log: Mutex<VecDeque<String>>,
     set_log_level: LogLevelSetter,
-    pub default_simulate: bool,
 }
 
 #[derive(Clone)]
@@ -78,7 +77,6 @@ impl AppState {
         actor: Handle,
         project: Project,
         token: String,
-        default_simulate: bool,
         set_log_level: LogLevelSetter,
     ) -> Self {
         let (shutdown_tx, _) = watch::channel(false);
@@ -94,7 +92,6 @@ impl AppState {
             busy: Mutex::new(None),
             log: Mutex::new(VecDeque::new()),
             set_log_level,
-            default_simulate,
         }))
     }
 
@@ -355,18 +352,16 @@ async fn ws_loop(s: AppState, mut sock: WebSocket) {
 async fn status(State(s): State<AppState>) -> ApiResult {
     let Reply::Status(st) = s.actor.request(Request::Status).await? else { return Err(internal(&"status")) };
     let p = s.project.lock().await;
-    Ok(Json(json!({"status": st, "project": summary(&p), "version": env!("CARGO_PKG_VERSION"), "default_simulate": s.default_simulate})))
+    Ok(Json(json!({"status": st, "project": summary(&p), "version": env!("CARGO_PKG_VERSION")})))
 }
 
 async fn config_info(State(s): State<AppState>) -> ApiResult {
     let c = &s.cfg;
-    Ok(Json(json!({"limits": c.limits, "roles": c.roles, "timing": c.timing, "device": c.device, "sim": c.sim, "routing": c.routing})))
+    Ok(Json(json!({"limits": c.limits, "roles": c.roles, "timing": c.timing, "device": c.device, "routing": c.routing})))
 }
 
 #[derive(Deserialize)]
 struct ConnectBody {
-    #[serde(default)]
-    simulate: bool,
     /// Device address from the UI (serial, host, port).
     #[serde(default)]
     device: Option<crate::config::DeviceCfg>,
@@ -374,15 +369,12 @@ struct ConnectBody {
 
 async fn connect(State(s): State<AppState>, Json(b): Json<ConnectBody>) -> ApiResult {
     let _g = s.claim("connect")?;
-    let Reply::Info(info) = s.actor.request(Request::Connect { simulate: b.simulate, device: b.device }).await? else {
+    let Reply::Info(info) = s.actor.request(Request::Connect { device: b.device }).await? else {
         return Err(internal(&"connect"));
     };
     let mut p = s.project.lock().await;
     p.device = Some(info.clone());
-    p.log(
-        "connect",
-        format!("{} {} serial {}{}", info.device, info.devtype, info.serial, if info.simulated { " (simulated)" } else { "" }),
-    );
+    p.log("connect", format!("{} {} serial {}", info.device, info.devtype, info.serial));
     Ok(Json(to_json(&info)?))
 }
 
@@ -525,7 +517,7 @@ async fn track_start(State(s): State<AppState>, Json(b): Json<TrackBody>) -> Api
         if let Some(d) = &p.device {
             h.push((
                 "instrument".into(),
-                format!("{} {} serial {} fw {} simulated={}", d.device, d.devtype, d.serial, d.firmware, d.simulated),
+                format!("{} {} serial {} fw {}", d.device, d.devtype, d.serial, d.firmware),
             ));
         }
         if let Some(e) = &p.estimate {

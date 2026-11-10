@@ -10,17 +10,14 @@ browser UI (static HTML/JS)  <--HTTP/WebSocket, localhost + token-->  Rust servi
                                                                   instrument actor (1 thread)
                                                                         |  trait NodeIo
                                           +-----------------------------+---------------------+
-                                     PyBridge (JSON lines)                                  SimUhf
-                                     bridge/uhf_bridge.py                          (physics simulation)
-                                     zhinst.core -> LabOne Data Server :8004
+                                                    PyBridge (JSON lines)
+                                                    bridge/uhf_bridge.py
+                                                    zhinst.core -> LabOne Data Server :8004
 ```
 
 ## Quick start
 
-Double-click **`start.bat`** (or `start_sim.bat` for the simulator).
-
-* `start.bat --sim` / `start_sim.bat`: built-in simulator, no instrument and no LabOne needed.
-* `start.bat`: real UHF. On the first start it creates `config.toml` from `config/default.toml`, builds
+Double-click **`start.bat`**. On the first start it creates `config.toml` from `config/default.toml`, builds
   the executable if Rust is installed and no `hipims-qcm.exe` is next to it, and installs the Python
   prerequisites (`pip install zhinst numpy`) if they are missing. Any option is passed on
   (`start.bat --port 9000 --no-browser`).
@@ -109,18 +106,17 @@ last message, **Arm outputs** (anything that drives hardware needs it; auto-disa
 ## Tests
 
 ```bash
-cargo test                      # 60 unit + 5 HTTP + bridge-contract tests (simulator, virtual time)
+cargo test                      # unit + HTTP + bridge-contract tests
 cargo clippy --all-targets -- -D warnings
 python bridge/test_bridge.py    # bridge logic against a fake zhinst (needs numpy)
 HQCM_TEST_PYTHON=python cargo test --test bridge_script   # real script <-> real Rust driver, fake zhinst
-cargo build && node tests/ui_e2e.mjs --shots shots        # real service + headless Edge/Chrome, all tabs
 ```
 
 ## Not verified on hardware (read before the first real run)
 
 Developed and tested here **without a UHF and without LabOne**. Verified: all maths against synthetic
-data, the driver/actor/server against the simulator, the Rust↔Python JSON contract and the bridge logic
-against a *fake* `zhinst`, and the UI in a real browser. **Not verified**, because it needs the instrument:
+data, the Rust↔Python JSON contract and the bridge logic
+against a *fake* `zhinst`, . **Not verified**, because it needs the instrument:
 
 1. `[pid]` enumerations and `pids/n/*` node names (`input`, `output`, `center`, `limitlower/upper`,
    `phaseunwrap`), whether `/pids/n/mode` must be set for PLL operation (`pll_mode_value`), and that for a
@@ -139,7 +135,7 @@ against a *fake* `zhinst`, and the UI in a real browser. **Not verified**, becau
 6. The `getSample` / `poll` field names (`timestamp`, `x`, `y`, `frequency`, `phase`) follow the official
    examples; a firmware that returns another layout will fail with an explicit error, not wrong data.
 
-Start with the simulator, then: connect → `drive 0.05 V` sweep → inspect the node tree in LabOne next to the
+Start with: connect → `drive 0.05 V` sweep → inspect the node tree in LabOne next to the
 service log (`Tracing level = debug` shows every node write) → PLL lock → only then Q-control and HiPIMS.
 
 ## Design decisions
@@ -150,4 +146,3 @@ service log (`Tracing level = debug` shows every node write) → PLL lock → on
   replace `PyBridge` later without touching routines, actor, UI or tests.
 * **Single actor thread with message passing** rather than `Arc<Mutex<Uhf>>`; the only shared state is the
   project (one async mutex) and the UI event bus.
-* **Virtual-time simulator** so the whole chain (sweep → fit → PLL → Q → HiPIMS) runs in CI in seconds.

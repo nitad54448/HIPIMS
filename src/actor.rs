@@ -11,7 +11,6 @@ use crate::analysis::fit::{FitMethod, Polarity, ResonanceEstimate};
 use crate::config::Config;
 use crate::error::{InstrumentError, MeasureError};
 use crate::instrument::bridge::PyBridge;
-use crate::instrument::sim::SimUhf;
 use crate::instrument::uhf::Uhf;
 use crate::instrument::{AbortFlag, AdvisorResult, DeviceInfo, JobCtl, NodeIo, Sample};
 use crate::measure::hipims::StepParams;
@@ -31,7 +30,6 @@ use tokio::sync::broadcast;
 pub enum Request {
     /// `device`: address entered by the operator (None: the one from the configuration).
     Connect {
-        simulate: bool,
         device: Option<crate::config::DeviceCfg>,
     },
     Disconnect,
@@ -94,7 +92,6 @@ pub enum Reply {
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Status {
     pub connected: bool,
-    pub simulated: bool,
     pub device: Option<DeviceInfo>,
     pub busy: Option<String>,
     pub tracking: bool,
@@ -244,17 +241,11 @@ struct Actor {
 pub fn spawn(cfg: Arc<Config>) -> Result<(Handle, std::thread::JoinHandle<()>), std::io::Error> {
     spawn_with(
         cfg,
-        Box::new(|cfg, simulate| -> Box<dyn NodeIo> {
-            if simulate {
-                Box::new(SimUhf::new(cfg))
-            } else {
-                Box::new(PyBridge::new(cfg))
-            }
-        }),
+        Box::new(|cfg| -> Box<dyn NodeIo> { Box::new(PyBridge::new(cfg)) }),
     )
 }
 
-pub type IoFactory = Box<dyn Fn(Arc<Config>, bool) -> Box<dyn NodeIo> + Send>;
+pub type IoFactory = Box<dyn Fn(Arc<Config>) -> Box<dyn NodeIo> + Send>;
 
 pub fn spawn_with(cfg: Arc<Config>, factory: IoFactory) -> Result<(Handle, std::thread::JoinHandle<()>), std::io::Error> {
     let (tx, rx) = flume::unbounded();
@@ -382,7 +373,7 @@ impl Actor {
         let mut ctl = Self::ctl(&abort, &estop, &events, job);
         match req {
             Request::Status => Ok(Reply::Status(Box::new(self.status.clone()))),
-            Request::Connect { simulate, device } => {
+            Request::Connect { device } => {
                 if self.uhf.is_some() {
                     return Err(MeasureError::Precondition("already connected".into()));
                 }
@@ -391,17 +382,13 @@ impl Actor {
                 cfg.device =
                     device.unwrap_or_else(|| cfg.device.clone()).normalized().map_err(|e| MeasureError::InvalidParams(e.to_string()))?;
                 let cfg = Arc::new(cfg);
-                let io = factory(cfg.clone(), simulate);
+                let io = factory(cfg.clone());
                 let uhf = Uhf::connect(io, cfg).map_err(MeasureError::from_instrument)?;
                 let info = uhf.info().clone();
-                self.status.simulated = info.simulated;
                 self.status.device = Some(info.clone());
                 self.status.last_error = None;
                 self.uhf = Some(uhf);
-                self.log(
-                    "info",
-                    format!("connected to {} ({}){}", info.device, info.devtype, if info.simulated { " [SIMULATED]" } else { "" }),
-                );
+                self.log("info", format!("connected to {} ({})", info.device, info.devtype));
                 Ok(Reply::Info(info))
             }
             Request::Disconnect => {
@@ -752,153 +739,4 @@ fn _assert_send() {
     is_send::<Actor>();
     let _ = AtomicBool::new(false).load(Ordering::SeqCst);
     let _ = Polarity::Normal;
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn sim_cfg() -> Arc<Config> {
-        let mut c = Config::default();
-        c.sim.realtime = false;
-        Arc::new(c)
-    }
-
-    fn sweep_req() -> SweepParams {
-        SweepParams { start_hz: 5.9970e6, stop_hz: 5.9998e6, points: 280, drive_v: 0.05, compensate_divider: true, bandwidth_hz: None }
-    }
-
-    fn t() -> Duration {
-        Duration::from_secs(60)
-    }
-
-    #[test]
-    fn full_session_on_the_simulator() {
-        let (h, jh) = spawn(sim_cfg()).unwrap();
-        assert!(matches!(
-            h.request_blocking(Request::Sweep(sweep_req()), t()),
-            Err(MeasureError::Instrument(InstrumentError::NotConnected))
-        ));
-        h.request_blocking(Request::Connect { simulate: true, device: None }, t()).unwrap();
-        let Reply::Sweep(s) = h.request_blocking(Request::Sweep(sweep_req()), t()).unwrap() else { panic!("wrong reply") };
-        assert!(s.lorentz.is_some());
-        let Reply::Status(st0) = h.request_blocking(Request::Status, t()).unwrap() else { panic!("wrong reply") };
-        assert!(st0.outputs_on, "after a sweep the drive is on: STOP has something to stop");
-        h.request_blocking(Request::SelectEstimate(FitMethod::Circle), t()).unwrap();
-        let Reply::Pll(p) = h.request_blocking(Request::PllStart(PllParams::default()), t()).unwrap() else { panic!("wrong reply") };
-        assert_eq!(p.state, LockState::Locked);
-        let dir = std::env::temp_dir().join(format!("hqcm_actor_{}", std::process::id()));
-        let path = dir.join("track.csv");
-        h.request_blocking(Request::TrackStart { rate_hz: 1000.0, path: path.clone(), header: vec![("sample".into(), "Ti".into())] }, t())
-            .unwrap();
-        // the calibration sweeps move the oscillator: refused while the PLL runs
-        let qp = QCalParams { gains: vec![-4.0, -2.0, 0.0, 2.0, 4.0], points: 200, ..Default::default() };
-        assert!(matches!(h.request_blocking(Request::QCalibrate(qp.clone()), t()), Err(MeasureError::Precondition(_))));
-        h.request_blocking(Request::PllStop, t()).unwrap();
-        let Reply::QCal(cal) = h.request_blocking(Request::QCalibrate(qp), t()).unwrap() else { panic!("wrong reply") };
-        assert!(cal.slope < 0.0);
-        // the calibration paused the recording (PLL demodulator reconfigured); it must resume
-        let Reply::Status(stq) = h.request_blocking(Request::Status, t()).unwrap() else { panic!("wrong reply") };
-        assert!(stq.tracking, "the recording must resume after the Q calibration");
-        h.request_blocking(Request::PllStart(PllParams::default()), t()).unwrap();
-        let Reply::Status(stp) = h.request_blocking(Request::Status, t()).unwrap() else { panic!("wrong reply") };
-        assert!(stp.tracking, "the recording must resume after a PLL start");
-        let Reply::Engaged(e) =
-            h.request_blocking(Request::QEngage(EngageParams { q_target: 70_000.0, ..Default::default() }), t()).unwrap()
-        else {
-            panic!("wrong reply")
-        };
-        assert!(e.pll_p.is_some(), "PLL gains must be rescaled when the PLL is active");
-        assert!(
-            e.warnings.iter().any(|w| w.contains("PLL bandwidth")),
-            "PLL BW 90 Hz < Q-control BW 138 Hz must be flagged: {:?}",
-            e.warnings
-        );
-        let Reply::Step(step) = h.request_blocking(Request::HipimsStep(StepParams { pulses: 50, ..Default::default() }), t()).unwrap()
-        else {
-            panic!("wrong reply")
-        };
-        assert!(step.x.len() >= 8);
-        let Reply::Track { samples, .. } = h.request_blocking(Request::TrackStop, t()).unwrap() else { panic!("wrong reply") };
-        assert!(samples > 100, "samples = {samples}");
-        let series = crate::project::load_series(&path, None).unwrap();
-        assert!(series.t_s.len() as u64 == samples);
-        // emergency stop switches everything off even though loops are running
-        h.emergency_stop();
-        let Reply::Status(st) = h.request_blocking(Request::Status, t()).unwrap() else { panic!("wrong reply") };
-        assert!(!st.pll_active && st.q_engaged.is_none() && !st.safe_state_uncertain && !st.outputs_on);
-        shutdown_and_join(&h, jh);
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn failed_track_start_leaves_no_orphan_file() {
-        let (h, jh) = spawn(sim_cfg()).unwrap();
-        h.request_blocking(Request::Connect { simulate: true, device: None }, t()).unwrap();
-        let dir = std::env::temp_dir().join(format!("hqcm_orphan_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("track.csv");
-        // stream_rate_max_hz = 2e6 in the default limits: rejected by the driver after the
-        // file was created -> the header-only file must not stay behind.
-        let r = h.request_blocking(Request::TrackStart { rate_hz: 5.0e6, path: path.clone(), header: vec![] }, t());
-        assert!(matches!(r, Err(MeasureError::Instrument(InstrumentError::LimitViolation { .. }))), "{r:?}");
-        assert!(!path.exists(), "no orphaned track file may remain");
-        // a valid rate records normally
-        h.request_blocking(Request::TrackStart { rate_hz: 100.0, path: path.clone(), header: vec![] }, t()).unwrap();
-        let Reply::Track { .. } = h.request_blocking(Request::TrackStop, t()).unwrap() else { panic!("wrong reply") };
-        assert!(path.exists());
-        shutdown_and_join(&h, jh);
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn connect_uses_the_address_typed_by_the_operator() {
-        let (h, jh) = spawn(sim_cfg()).unwrap();
-        let bad = crate::config::DeviceCfg { id: "dev 1/../x".into(), ..Default::default() };
-        assert!(matches!(
-            h.request_blocking(Request::Connect { simulate: true, device: Some(bad) }, t()),
-            Err(MeasureError::InvalidParams(_))
-        ));
-        let dev = crate::config::DeviceCfg { id: "DEV9999".into(), host: "localhost".into(), port: 8004 };
-        let Reply::Info(info) = h.request_blocking(Request::Connect { simulate: true, device: Some(dev) }, t()).unwrap() else {
-            panic!("wrong reply")
-        };
-        assert_eq!(info.device, "dev9999");
-        let Reply::Status(st) = h.request_blocking(Request::Status, t()).unwrap() else { panic!("wrong reply") };
-        assert_eq!(st.device.unwrap().device, "dev9999");
-        shutdown_and_join(&h, jh);
-    }
-
-    #[test]
-    fn cancel_aborts_a_running_sweep_and_leaves_drive_off() {
-        let mut c = Config::default();
-        c.sim.realtime = true; // pacing makes the sweep long enough to cancel
-        let (h, jh) = spawn(Arc::new(c)).unwrap();
-        h.request_blocking(Request::Connect { simulate: true, device: None }, t()).unwrap();
-        let h2 = h.clone();
-        let canceller = std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(60));
-            h2.cancel();
-        });
-        let mut big = sweep_req();
-        big.points = 4000;
-        let r = h.request_blocking(Request::Sweep(big), t());
-        canceller.join().unwrap();
-        assert!(matches!(r, Err(MeasureError::Cancelled)), "{r:?}");
-        let _ = h.request_blocking(Request::Status, t());
-        shutdown_and_join(&h, jh);
-    }
-
-    #[test]
-    fn unsafe_requests_are_rejected_without_touching_the_instrument() {
-        let (h, jh) = spawn(sim_cfg()).unwrap();
-        h.request_blocking(Request::Connect { simulate: true, device: None }, t()).unwrap();
-        let mut p = sweep_req();
-        p.drive_v = 5.0; // x2 divider => 10 V, above the 1 V limit
-        assert!(h.request_blocking(Request::Sweep(p), t()).is_err());
-        assert!(h.request_blocking(Request::PllStart(PllParams::default()), t()).is_err(), "no resonance yet");
-        assert!(h.request_blocking(Request::QCalibrate(QCalParams::default()), t()).is_err());
-        shutdown_and_join(&h, jh);
-    }
 }

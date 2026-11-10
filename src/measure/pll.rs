@@ -66,7 +66,7 @@ pub struct PllStatus {
     pub polarity: Polarity,
 }
 
-/// Local PI model used when the device advisor is unavailable (and by the simulator).
+/// Local PI model used when the device advisor is unavailable.
 ///
 /// Loop: input = phase error (deg), output = frequency correction (Hz). The
 /// resonator is a static phase-to-frequency slope `s` (deg/Hz); the closed-loop

@@ -2,13 +2,11 @@
 //!
 //! * [`NodeIo`]  – transport: node get/set, module runs (sweeper, DAQ, PID advisor),
 //!   streaming. Implemented by [`bridge::PyBridge`] (real UHF through the official
-//!   `zhinst.core` Python API) and [`sim::SimUhf`] (physics simulation, used for
-//!   tests and for development on a PC without LabOne).
+//!   `zhinst.core` Python API).
 //! * [`uhf::Uhf`] – typed driver: unit-typed methods, hard limits validated before
 //!   every write, safe-state shutdown.
 
 pub mod bridge;
-pub mod sim;
 pub mod uhf;
 
 use crate::error::TransportError;
@@ -47,7 +45,6 @@ pub struct DeviceInfo {
     pub serial: String,
     pub options: Vec<String>,
     pub firmware: String,
-    pub simulated: bool,
 }
 
 /// One demodulator sample. `t_s` is the instrument timestamp converted with the
@@ -99,7 +96,7 @@ pub struct AdvisorRequest {
     /// 4 = internal PLL (phase -> oscillator frequency), 6 = resonator amplitude, ...
     pub dut_source: u8,
     /// Phase-slope magnitude |d(theta)/df| at resonance in deg/Hz (used by the
-    /// simulator and by the local fallback; the device advisor measures its own model).
+    /// local fallback; the device advisor measures its own model).
     pub slope_deg_per_hz: f64,
     pub q_factor: f64,
     pub f0_hz: f64,
@@ -128,8 +125,7 @@ pub struct GatedRequest {
     pub points: usize,
     pub timeout_s: f64,
     /// Informational: window start relative to the plasma-pulse start (s), as set on
-    /// the pulse generator. Hardware ignores it; the simulator uses it to place the
-    /// window against its simulated plasma pulse.
+    /// the pulse generator. Hardware ignores it.
     #[serde(default)]
     pub hint_window_start_s: f64,
 }
@@ -189,7 +185,7 @@ pub trait NodeIo: Send {
     fn sync(&mut self) -> Result<(), TransportError>;
     /// Latest value of `/dev/demods/<n>/sample` (`getSample`).
     fn read_sample(&mut self, demod: u8) -> Result<Sample, TransportError>;
-    /// Wait for `d`. Hardware: real sleep. Simulator: advances virtual time.
+    /// Wait for `d`. Real sleep.
     fn wait(&mut self, d: Duration);
 
     /// Frequency sweep using the LabOne Sweeper module.

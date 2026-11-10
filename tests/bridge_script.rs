@@ -44,7 +44,7 @@ fn real_bridge_script_against_fake_zhinst() {
 
     let mut u = Uhf::connect(Box::new(PyBridge::new(cfg.clone())), cfg.clone()).expect("connect through the bridge");
     assert_eq!(u.info().devtype, "UHFLI");
-    assert!(u.info().options.iter().any(|o| o == "PID") && !u.info().simulated);
+    assert!(u.info().options.iter().any(|o| o == "PID"));
 
     // node round-trips with the right types
     u.set_osc_freq(0, Hertz(5.9985e6)).unwrap();
